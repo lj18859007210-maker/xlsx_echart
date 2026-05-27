@@ -12,8 +12,10 @@ class SheetRecordModel(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     sheet_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    sheet_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     col_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_hidden: Mapped[bool] = mapped_column(nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -21,3 +23,7 @@ class SheetRecordModel(Base):
     )
 
     task: Mapped["TaskRecordModel"] = relationship(back_populates="sheets")
+    cells: Mapped[list["CellRecordModel"]] = relationship(
+        back_populates="sheet",
+        cascade="all, delete-orphan",
+    )
