@@ -1,0 +1,90 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
+  background:
+    radial-gradient(circle at top left, #fff1d6 0%, transparent 35%),
+    linear-gradient(180deg, #f7f4ee 0%, #efe8dc 100%);
+  color: #1f2933;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 48px 24px 64px;
+}
+
+.hero {
+  padding: 32px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 20px 60px rgba(73, 52, 24, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 12px;
+  color: #b56b18;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(40px, 7vw, 72px);
+  line-height: 0.95;
+}
+
+.summary {
+  max-width: 640px;
+  margin: 16px 0 0;
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.panel {
+  padding: 24px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 12px 40px rgba(73, 52, 24, 0.1);
+}
+
+.panel h2 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.panel p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .app-shell {
+    padding: 24px 16px 40px;
+  }
+
+  .panel-grid {
+    grid-template-columns: 1fr;
+  }
+}
