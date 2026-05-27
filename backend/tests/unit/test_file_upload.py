@@ -1,6 +1,10 @@
+import asyncio
+from io import BytesIO
 from collections.abc import Generator
 
+import pytest
 from fastapi.testclient import TestClient
+from fastapi import UploadFile
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -10,6 +14,7 @@ from app.db.models.file_record import FileRecordModel
 from app.db.models.task_record import TaskRecordModel
 from app.db.session import get_db
 from app.main import app
+from app.services.file_upload_service import create_upload_records
 
 
 def _override_db_session(database_url: str) -> tuple[sessionmaker[Session], object]:
@@ -110,3 +115,36 @@ def test_upload_persists_file_and_task_records(tmp_path) -> None:
     assert task_record is not None
     assert task_record.file_id == file_record.id
     assert task_record.status == "uploaded"
+
+
+def test_upload_removes_saved_file_when_commit_fails(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    session_factory, _ = _override_db_session(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
+    upload_dir = tmp_path / "uploads"
+    settings.upload_dir = str(upload_dir)
+
+    with session_factory() as session:
+        original_rollback = session.rollback
+        rollback_called = {"value": False}
+
+        def broken_commit() -> None:
+            raise RuntimeError("database commit failed")
+
+        def tracked_rollback() -> None:
+            rollback_called["value"] = True
+            original_rollback()
+
+        monkeypatch.setattr(session, "commit", broken_commit)
+        monkeypatch.setattr(session, "rollback", tracked_rollback)
+
+        upload = UploadFile(
+            filename="broken.xlsx",
+            file=BytesIO(b"fake-xlsx-content"),
+        )
+
+        with pytest.raises(RuntimeError, match="database commit failed"):
+            asyncio.run(create_upload_records(session, upload))
+
+        assert rollback_called["value"] is True
+        assert list(upload_dir.iterdir()) == []
+        assert session.scalar(select(FileRecordModel)) is None
+        assert session.scalar(select(TaskRecordModel)) is None

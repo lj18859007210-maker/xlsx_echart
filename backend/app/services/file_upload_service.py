@@ -39,23 +39,28 @@ async def create_upload_records(db: Session, file: UploadFile) -> dict[str, int 
 
     storage_path = _build_storage_path(file.filename or "upload.xlsx")
     storage_path.write_bytes(contents)
+    try:
+        file_record = FileRecordModel(
+            file_name=file.filename or storage_path.name,
+            file_path=str(storage_path),
+            file_type=storage_path.suffix.lower(),
+        )
+        db.add(file_record)
+        db.flush()
 
-    file_record = FileRecordModel(
-        file_name=file.filename or storage_path.name,
-        file_path=str(storage_path),
-        file_type=storage_path.suffix.lower(),
-    )
-    db.add(file_record)
-    db.flush()
-
-    task_record = TaskRecordModel(
-        file_id=file_record.id,
-        status="uploaded",
-    )
-    db.add(task_record)
-    db.commit()
-    db.refresh(file_record)
-    db.refresh(task_record)
+        task_record = TaskRecordModel(
+            file_id=file_record.id,
+            status="uploaded",
+        )
+        db.add(task_record)
+        db.commit()
+        db.refresh(file_record)
+        db.refresh(task_record)
+    except Exception:
+        db.rollback()
+        if storage_path.exists():
+            storage_path.unlink()
+        raise
 
     return {
         "file_id": file_record.id,
