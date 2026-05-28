@@ -1,12 +1,13 @@
 ﻿"""Formula DSL Schema definitions."""
 
-from enum import Enum
-from typing import Optional, List
+from __future__ import annotations
+
 from pydantic import BaseModel
 
 
-class FormulaType(str, Enum):
-    """Types of formulas supported by the DSL."""
+class FormulaType:
+    """String constants for formula types."""
+
     COLUMN_ARITHMETIC = "column_arithmetic"
     ROW_AGGREGATION = "row_aggregation"
     YOY_CHANGE = "yoy_change"
@@ -15,31 +16,38 @@ class FormulaType(str, Enum):
 
 
 class FormulaRule(BaseModel):
-    """Parsed formula rule structure."""
+    """Parsed formula rule structure.
+
+    Fields are grouped by purpose.  Only fields relevant to the active
+    ``formula_type`` are populated by the parser; the rest keep their
+    defaults.
+    """
+
+    # Identity & text --------------------------------------------------------
     formula_id: str = ""
     formula_text: str
-    formula_type: FormulaType
+    formula_type: str
     description: str = ""
-    
-    # For column arithmetic
-    left: Optional[str] = None
-    operator: Optional[str] = None
-    right: Optional[List[str]] = None
-    
-    # For row aggregation
-    function: Optional[str] = None
-    range_start: Optional[str] = None
-    range_end: Optional[str] = None
+
+    # Column arithmetic fields -----------------------------------------------
+    left: str | None = None
+    operator: str | None = None
+    right: list[str] | None = None
+
+    # Row aggregation fields -------------------------------------------------
+    function: str | None = None
+    range_start: str | None = None
+    range_end: str | None = None
     step: int = 1
-    
-    # For YoY/MoM
-    new_period: Optional[str] = None
-    old_period: Optional[str] = None
-    
-    # For share calculation
-    target_column: Optional[str] = None
-    
-    # Metadata
-    scope: dict = {}
+
+    # YoY / MoM fields ------------------------------------------------------
+    new_period: str | None = None
+    old_period: str | None = None
+
+    # Share calculation fields -----------------------------------------------
+    target_column: str | None = None
+
+    # Metadata ---------------------------------------------------------------
+    scope: dict[str, object] = {}
     confidence: float = 1.0
     rule_type: str = "derived"
