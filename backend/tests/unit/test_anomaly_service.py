@@ -1,4 +1,4 @@
-"""Day 17 tests - business rule anomaly detection."""
+"""Day 17-18 tests - business rule + statistical anomaly detection."""
 
 import pytest
 from sqlalchemy import create_engine, event, select
@@ -13,6 +13,7 @@ from app.db.models.task_record import TaskRecordModel
 from app.services.anomaly import anomaly_service
 from app.services.anomaly.decline_detector import detect_consecutive_declines
 from app.services.anomaly.growth_rate_detector import detect_growth_rate_anomalies
+from app.services.anomaly.iqr_detector import detect_iqr_outliers
 from app.services.anomaly.negative_zero_detector import detect_negative_zero_anomalies
 from app.services.anomaly.structure_share_detector import detect_structure_share_anomalies
 
@@ -97,6 +98,23 @@ def _create_task(
         session.add(sv)
         session.commit()
         return task_record.id
+
+
+def _make_grid_with_outlier(
+    baseline_values: list[str],
+    outlier_row: tuple[int, str],
+) -> list[list]:
+    """Build a grid with 30+ varied baseline rows plus an outlier."""
+    grid = [["Region", "Revenue"]]
+    for i, val in enumerate(baseline_values):
+        grid.append([f"Q{i+1}", val])
+    idx, val = outlier_row
+    # Insert the outlier at the right position
+    if idx < len(grid) - 1:
+        grid[idx + 1][1] = val
+    else:
+        grid.append([f"Q{len(grid)}", val])
+    return grid
 
 
 class TestGrowthRateDetector:
@@ -356,3 +374,112 @@ class TestAnomalyService:
         with session_factory() as session:
             with pytest.raises(anomaly_service.HTTPException, match="409"):
                 anomaly_service.detect_task_anomalies(task_id, session)
+
+
+class TestIQRDetector:
+    """Day 18: IQR statistical outlier detection."""
+
+    def test_flags_extreme_outlier(self):
+        """A single extreme value outside 1.5*IQR should be flagged."""
+        # 30 rows with natural variation (50-150) + 1 extreme outlier
+        baseline = [str(80 + (i % 11) * 4) for i in range(30)]
+        grid = _make_grid_with_outlier(baseline, (30, "500"))
+
+        kinds = ["dimension", "measure"]
+        paths = [["Region"], ["Revenue"]]
+
+        issues = detect_iqr_outliers(grid, kinds, paths)
+        assert len(issues) == 1
+        assert issues[0]["issue_type"] == "iqr_outlier"
+        assert issues[0]["detection_source"] == "statistical"
+
+    def test_no_false_positives_on_normal_data(self):
+        """Data with natural variation but no extreme outliers."""
+        baseline = [str(80 + (i % 11) * 4) for i in range(30)]
+        grid = [["Region", "Revenue"]]
+        for i, val in enumerate(baseline):
+            grid.append([f"Q{i+1}", val])
+
+        kinds = ["dimension", "measure"]
+        paths = [["Region"], ["Revenue"]]
+
+        issues = detect_iqr_outliers(grid, kinds, paths)
+        assert len(issues) == 0
+
+    def test_skips_small_samples(self):
+        """Fewer than 4 values should produce no results."""
+        grid = [
+            ["Region", "Revenue"],
+            ["Q1", "100"],
+            ["Q2", "200"],
+        ]
+        kinds = ["dimension", "measure"]
+        paths = [["Region"], ["Revenue"]]
+
+        issues = detect_iqr_outliers(grid, kinds, paths)
+        assert len(issues) == 0
+
+    def test_flags_both_low_and_high_outliers(self):
+        """Both low and high outliers should be flagged."""
+        baseline = [str(80 + (i % 11) * 4) for i in range(30)]
+        grid = [["Region", "Revenue"]]
+        for i, val in enumerate(baseline):
+            grid.append([f"Q{i+1}", val])
+        grid.append(["Q31", "1"])    # low outlier
+        grid.append(["Q32", "500"])  # high outlier
+
+        kinds = ["dimension", "measure"]
+        paths = [["Region"], ["Revenue"]]
+
+        issues = detect_iqr_outliers(grid, kinds, paths)
+        assert len(issues) >= 2
+
+
+class TestHybridMode:
+    """Day 18: hybrid mode with N>=30 threshold."""
+
+    def test_hybrid_mode_with_large_sample(self, tmp_path):
+        """N>=30 should enable hybrid mode with both rule and stat hits."""
+        session_factory = _override_db_session(
+            f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+        )
+        # 30 rows of varied data + 1 extreme outlier that triggers both
+        # growth_rate anomaly (huge jump from previous) and IQR outlier
+        baseline = [str(80 + (i % 11) * 4) for i in range(30)]
+        grid = [["Region", "Revenue"]]
+        for i, val in enumerate(baseline):
+            grid.append([f"Q{i+1}", val])
+        grid.append(["Q31", "500"])
+
+        kinds = ["dimension", "measure"]
+        paths = [["Region"], ["Revenue"]]
+        task_id = _create_task(session_factory, grid, kinds, paths)
+
+        with session_factory() as session:
+            result = anomaly_service.detect_task_anomalies(task_id, session)
+
+        assert result["detection_mode"] == "hybrid"
+        assert result["rule_hits"] > 0
+        assert result["stat_hits"] > 0
+        assert result["anomaly_issue_count"] == result["rule_hits"] + result["stat_hits"]
+
+    def test_business_rule_mode_with_small_sample(self, tmp_path):
+        """N<30 should stay in business_rule mode with stat_hits=0."""
+        session_factory = _override_db_session(
+            f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+        )
+        grid = [
+            ["Region", "Revenue"],
+            ["Q1", "100"],
+            ["Q2", "200"],
+            ["Q3", "-10"],
+        ]
+        kinds = ["dimension", "measure"]
+        paths = [["Region"], ["Revenue"]]
+        task_id = _create_task(session_factory, grid, kinds, paths)
+
+        with session_factory() as session:
+            result = anomaly_service.detect_task_anomalies(task_id, session)
+
+        assert result["detection_mode"] == "business_rule"
+        assert result["stat_hits"] == 0

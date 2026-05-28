@@ -1,4 +1,4 @@
-"""Day 17 anomaly detection orchestration service."""
+"""Day 17-18 anomaly detection orchestration service with IQR support."""
 
 from __future__ import annotations
 
@@ -12,15 +12,23 @@ from app.services.structure_version_service import preferred_structure_version
 
 from .decline_detector import detect_consecutive_declines
 from .growth_rate_detector import detect_growth_rate_anomalies
+from .iqr_detector import detect_iqr_outliers
 from .negative_zero_detector import detect_negative_zero_anomalies
 from .structure_share_detector import detect_structure_share_anomalies
+
+# Day 18: minimum sample size for statistical model
+IQR_MIN_SAMPLE = 30
 
 
 def detect_task_anomalies(
     task_id: int,
     db: Session,
 ) -> dict[str, object]:
-    """Run all business rule anomaly detectors and persist results."""
+    """Run anomaly detectors with automatic mode switching.
+
+    Day 17: business rule detectors only.
+    Day 18: adds IQR when per-column sample size >= 30.
+    """
     task = db.scalar(
         select(TaskRecordModel).where(TaskRecordModel.id == task_id),
     )
@@ -48,6 +56,7 @@ def detect_task_anomalies(
         )
 
     all_issues: list[dict[str, object]] = []
+    any_statistical = False
 
     for sheet_data in sheets_data:
         sheet_id = int(sheet_data.get("sheet_id", 0))
@@ -58,12 +67,25 @@ def detect_task_anomalies(
         if not isinstance(aligned_grid, list) or len(aligned_grid) < 2:
             continue
 
-        detectors = [
+        # Always run business rule detectors
+        detectors: list[tuple[str, object]] = [
             ("growth_rate", detect_growth_rate_anomalies),
             ("decline", detect_consecutive_declines),
             ("negative_zero", detect_negative_zero_anomalies),
             ("structure_share", detect_structure_share_anomalies),
         ]
+
+        # Day 18: check per-column sample size for IQR
+        measure_cols = [i for i, k in enumerate(column_kinds) if k == "measure"]
+        max_sample = 0
+        for col_idx in measure_cols:
+            n = _count_valid_cells(aligned_grid, col_idx)
+            if n > max_sample:
+                max_sample = n
+
+        if max_sample >= IQR_MIN_SAMPLE:
+            detectors.append(("iqr", detect_iqr_outliers))
+            any_statistical = True
 
         for _name, detector_fn in detectors:
             sheet_issues = detector_fn(aligned_grid, column_kinds, column_paths)
@@ -75,19 +97,26 @@ def detect_task_anomalies(
                 )
             all_issues.extend(sheet_issues)
 
-    # Deduplicate: same (sheet_id, row_index, col_index, issue_type) -> keep highest score
+    # Deduplicate
     deduped = _deduplicate_issues(all_issues)
 
-    # Persist (idempotent)
+    # Persist
     _persist_anomaly_issues(task_id, deduped, db)
 
-    rule_hits = len(deduped)
-    stat_hits = 0  # Day 18 will populate this
+    # Count by source
+    rule_hits = sum(
+        1 for i in deduped
+        if i.get("detection_source") == "business_rule"
+    )
+    stat_hits = sum(
+        1 for i in deduped
+        if i.get("detection_source") == "statistical"
+    )
 
     return {
         "task_id": task_id,
         "status": task.status,
-        "detection_mode": "business_rule",
+        "detection_mode": "hybrid" if any_statistical else "business_rule",
         "anomaly_issue_count": len(deduped),
         "rule_hits": rule_hits,
         "stat_hits": stat_hits,
@@ -130,14 +159,29 @@ def get_anomaly_issues(
     ]
 
 
+def _count_valid_cells(grid: list[list], col_idx: int) -> int:
+    """Count rows with valid numeric values in a given column."""
+    count = 0
+    for row_idx in range(1, len(grid)):
+        row = grid[row_idx]
+        if not isinstance(row, list):
+            continue
+        try:
+            val = row[col_idx]
+            if val not in (None, ""):
+                float(str(val).replace(",", ""))
+                count += 1
+        except (IndexError, ValueError, TypeError):
+            continue
+    return count
+
+
 def _format_cell_address(row_index: int, col_index: int) -> str:
-    """Format a 0-based (row, col) pair as a human-readable cell address."""
     col_letter = _column_letter(col_index)
     return f"{col_letter}{row_index + 1}"
 
 
 def _column_letter(col_index: int) -> str:
-    """Convert 0-based column index to Excel-style column letter(s)."""
     letters = ""
     n = col_index
     while n >= 0:
@@ -149,10 +193,6 @@ def _column_letter(col_index: int) -> str:
 def _deduplicate_issues(
     issues: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    """Deduplicate issues by (sheet_id, row_index, col_index, issue_type).
-
-    When duplicates found, keep the one with the highest score.
-    """
     seen: dict[tuple, dict[str, object]] = {}
     for issue in issues:
         key = (
@@ -172,7 +212,6 @@ def _persist_anomaly_issues(
     issues: list[dict[str, object]],
     db: Session,
 ) -> None:
-    """Delete old anomaly issues and insert new ones (idempotent)."""
     db.execute(
         delete(AnomalyIssueRecordModel).where(
             AnomalyIssueRecordModel.task_id == task_id,
