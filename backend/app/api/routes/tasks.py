@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.task_record import TaskRecordModel
 from app.db.session import get_db
+from app.schemas.analysis_schema import AnalysisResponse
 from app.schemas.anomaly_schema import AnomalyDetectionResult, AnomalyIssueListResponse
 from app.schemas.review_schema import (
     ConfirmStructureVersionRequest,
@@ -21,6 +22,7 @@ from app.schemas.task_schema import (
     TaskParseResponse,
 )
 from app.schemas.validation_schema import ValidationIssueListResponse, ValidationResult
+from app.services.analysis import analysis_service
 from app.services.anomaly import anomaly_service
 from app.services.excel_parse_service import parse_task_workbook
 from app.services.formula import formula_inference_service, formula_rule_reader
@@ -184,3 +186,24 @@ def get_task_summary(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="No summary found for this task")
     return SummaryResponse(**payload)
+
+
+@router.post("/{task_id}/analyze", response_model=AnalysisResponse)
+def analyze_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+) -> AnalysisResponse:
+    payload = analysis_service.analyze_task(task_id, db)
+    return AnalysisResponse(**payload)
+
+
+@router.get("/{task_id}/insights", response_model=AnalysisResponse)
+def get_task_insights(
+    task_id: int,
+    db: Session = Depends(get_db),
+) -> AnalysisResponse:
+    payload = analysis_service.get_insight(task_id, db)
+    if payload is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No insights found for this task")
+    return AnalysisResponse(**payload)

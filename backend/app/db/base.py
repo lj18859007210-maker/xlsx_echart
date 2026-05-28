@@ -11,6 +11,7 @@ from app.db.models import (  # noqa: E402,F401
     cell_record,
     file_record,
     formula_rule_record,
+    insight_record,
     sheet_record,
     structure_version_record,
     summary_record,

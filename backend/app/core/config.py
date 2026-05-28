@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     formula_llm_api_key: str = ""
     formula_llm_model: str = "mock/day13"
     formula_prompt_version: str = "day13_v1"
+    analysis_llm_api_url: str = "https://example.invalid/v1/analyze"
+    analysis_llm_api_key: str = ""
+    analysis_llm_model: str = "mock/day20"
+    analysis_prompt_version: str = "day20_v1"
 
     model_config = SettingsConfigDict(
         env_file=REPO_ROOT / ".env",
