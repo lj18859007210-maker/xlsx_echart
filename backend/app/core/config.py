@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     database_url: str = DEFAULT_DATABASE_URL
     upload_dir: str = str(DEFAULT_UPLOAD_DIR)
     log_level: str = "INFO"
+    formula_llm_api_url: str = "https://example.invalid/v1/formula-infer"
+    formula_llm_api_key: str = ""
+    formula_llm_model: str = "mock/day13"
+    formula_prompt_version: str = "day13_v1"
 
     model_config = SettingsConfigDict(
         env_file=REPO_ROOT / ".env",

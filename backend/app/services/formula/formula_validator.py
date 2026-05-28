@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .formula_exceptions import FormulaValidationError
 from .formula_schema import FormulaRule, FormulaType
 
 

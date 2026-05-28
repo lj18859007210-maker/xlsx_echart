@@ -29,6 +29,11 @@ def test_core_models_define_expected_relationships() -> None:
     assert "task" in SheetRecordModel.__mapper__.relationships.keys()
 
 
+def test_formula_rule_model_registers_metadata_and_relationship() -> None:
+    assert "formula_rules" in Base.metadata.tables.keys()
+    assert "formula_rules" in TaskRecordModel.__mapper__.relationships.keys()
+
+
 def test_sqlite_engine_enables_foreign_keys() -> None:
     with engine.connect() as connection:
         foreign_keys = connection.execute(text("PRAGMA foreign_keys")).scalar_one()

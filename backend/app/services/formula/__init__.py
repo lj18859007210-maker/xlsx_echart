@@ -1,5 +1,6 @@
 ﻿"""Formula DSL public API."""
 
+from . import formula_inference_service  # noqa: F401
 from .formula_exceptions import FormulaError, FormulaParseError, FormulaValidationError
 from .formula_parser import FormulaParser
 from .formula_schema import FormulaRule, FormulaType
@@ -13,4 +14,5 @@ __all__ = [
     "FormulaRule",
     "FormulaType",
     "FormulaValidator",
+    "formula_inference_service",
 ]

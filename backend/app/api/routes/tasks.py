@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+﻿from fastapi import APIRouter, Body, Depends
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -9,8 +9,13 @@ from app.schemas.review_schema import (
     StructureVersionSaveResponse,
     TaskReviewResponse,
 )
-from app.schemas.task_schema import TaskParseResponse
+from app.schemas.task_schema import (
+    TaskInferFormulaRequest,
+    TaskInferFormulaResponse,
+    TaskParseResponse,
+)
 from app.services.excel_parse_service import parse_task_workbook
+from app.services.formula import formula_inference_service
 from app.services.review_service import (
     build_task_review,
     confirm_structure_version,
@@ -64,3 +69,18 @@ def confirm_task_structure(
 ) -> ConfirmStructureVersionResponse:
     payload = confirm_structure_version(task_id, request.structure_version, db)
     return ConfirmStructureVersionResponse(**payload)
+
+
+@router.post("/{task_id}/infer-formulas", response_model=TaskInferFormulaResponse)
+def infer_task_formulas(
+    task_id: int,
+    request: TaskInferFormulaRequest = Body(TaskInferFormulaRequest()),
+    db: Session = Depends(get_db),
+) -> TaskInferFormulaResponse:
+    payload = formula_inference_service.infer_task_formulas(
+        task_id,
+        db,
+        model_name=request.model_name,
+        max_candidates_per_sheet=request.max_candidates_per_sheet,
+    )
+    return TaskInferFormulaResponse(**payload)

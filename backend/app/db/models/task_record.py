@@ -1,9 +1,16 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, text, func
+from sqlalchemy import DateTime, ForeignKey, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.db.models.file_record import FileRecordModel
+    from app.db.models.formula_rule_record import FormulaRuleRecordModel
+    from app.db.models.sheet_record import SheetRecordModel
+    from app.db.models.structure_version_record import StructureVersionRecordModel
 
 
 class TaskRecordModel(Base):
@@ -38,4 +45,8 @@ class TaskRecordModel(Base):
         back_populates="task",
         cascade="all, delete-orphan",
         order_by="StructureVersionRecordModel.version_number",
+    )
+    formula_rules: Mapped[list["FormulaRuleRecordModel"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
     )

@@ -463,3 +463,83 @@ def test_review_does_not_treat_first_data_row_as_header_when_only_row_dimension_
     assert sheet["aligned_cell_roles"] == [["dimension", "dimension"], ["dimension", "measure"]]
     assert sheet["header_row_span"] == 1
     assert sheet["column_paths"] == [["Region"], ["Revenue"]]
+
+
+
+def test_infer_formulas_requires_confirmed_task(tmp_path) -> None:
+    session_factory, override_get_db = _override_db_session(
+        f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+
+    workbook_path = tmp_path / "source.xlsx"
+    _build_sample_workbook(workbook_path)
+    task_id = _create_uploaded_task(session_factory, workbook_path)
+
+    assert client.post(f"/api/tasks/{task_id}/parse").status_code == 200
+
+    response = client.post(f"/api/tasks/{task_id}/infer-formulas", json={})
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Task must be confirmed before formula inference"
+
+
+def test_infer_formulas_returns_empty_when_llm_unavailable(tmp_path, monkeypatch) -> None:
+    session_factory, override_get_db = _override_db_session(
+        f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+
+    monkeypatch.setattr(
+        "app.services.formula.llm_formula_client.run_formula_inference",
+        lambda **_: {"bad": "payload"},
+    )
+
+    workbook_path = tmp_path / "source.xlsx"
+    _build_sample_workbook(workbook_path)
+    task_id = _create_uploaded_task(session_factory, workbook_path)
+
+    assert client.post(f"/api/tasks/{task_id}/parse").status_code == 200
+
+    review = client.get(f"/api/tasks/{task_id}/review")
+    assert review.status_code == 200
+    sheet = review.json()["sheets"][0]
+
+    assert client.post(
+        f"/api/tasks/{task_id}/structure-versions",
+        json={
+            "base_structure_version": 0,
+            "sheets": [
+                {
+                    "sheet_id": sheet["sheet_id"],
+                    "sheet_name": sheet["sheet_name"],
+                    "sheet_index": sheet["sheet_index"],
+                    "row_count": sheet["row_count"],
+                    "col_count": sheet["col_count"],
+                    "is_hidden": sheet["is_hidden"],
+                    "merge_ranges": sheet["merge_ranges"],
+                    "aligned_grid": sheet["aligned_grid"],
+                    "aligned_cell_roles": sheet["aligned_cell_roles"],
+                    "aligned_source_map": sheet["aligned_source_map"],
+                    "cell_tags": sheet.get("cell_tags", []),
+                }
+            ],
+        },
+    ).status_code == 201
+
+    assert client.post(
+        f"/api/tasks/{task_id}/confirm",
+        json={"structure_version": 1},
+    ).status_code == 200
+
+    response = client.post(f"/api/tasks/{task_id}/infer-formulas", json={})
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["task_id"] == task_id
+    assert payload["accepted_rules"] == []
+    assert payload["rejected_count"] == 0
