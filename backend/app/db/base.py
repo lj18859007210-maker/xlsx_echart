@@ -6,4 +6,10 @@ class Base(DeclarativeBase):
 
 
 # Import models so metadata is populated for migrations and tests.
-from app.db.models import cell_record, file_record, sheet_record, task_record  # noqa: E402,F401
+from app.db.models import (  # noqa: E402,F401
+    cell_record,
+    file_record,
+    sheet_record,
+    structure_version_record,
+    task_record,
+)

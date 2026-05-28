@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
@@ -66,6 +66,18 @@ def _build_dual_track_workbook(path: Path) -> None:
     workbook.close()
 
 
+def _build_row_dimension_workbook(path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "row-dimension"
+    sheet["A1"] = "Region"
+    sheet["B1"] = "Revenue"
+    sheet["A2"] = "East"
+    sheet["B2"] = 120
+    workbook.save(path)
+    workbook.close()
+
+
 def _create_uploaded_task(session_factory: sessionmaker[Session], workbook_path: Path) -> int:
     with session_factory() as session:
         file_record = FileRecordModel(
@@ -105,6 +117,7 @@ def test_review_returns_task_level_sheet_snapshots(tmp_path) -> None:
     assert payload["task_id"] == task_id
     assert payload["status"] == "waiting_confirm"
     assert payload["structure_version"] == 0
+    assert payload["editable_structure_version"] == 0
     assert len(payload["sheets"]) == 1
 
     sheet = payload["sheets"][0]
@@ -117,6 +130,11 @@ def test_review_returns_task_level_sheet_snapshots(tmp_path) -> None:
     assert sheet["aligned_grid"] == [["Header", "Header"], ["100", "200"]]
     assert sheet["aligned_cell_roles"] == [["dimension", "dimension"], ["measure", "measure"]]
     assert sheet["aligned_source_map"] == [["A1", "A1"], ["A2", "B2"]]
+    assert sheet["header_row_span"] == 1
+    assert sheet["column_paths"] == [["Header"], ["Header"]]
+    assert sheet["column_kinds"] == ["dimension", "dimension"]
+    assert sheet["dimension_columns"] == [0, 1]
+    assert sheet["measure_columns"] == []
     assert sheet["raw_cells"][0]["address"] == "A1"
     assert sheet["raw_cells"][0]["merge_range"] == "A1:B1"
 
@@ -161,3 +179,287 @@ def test_review_builds_dual_track_alignment_for_dimension_and_measure_merges(tmp
         ["dimension", "measure", "measure"],
     ]
     assert sheet["aligned_source_map"] == [["A1", "B1", "C1"], ["A1", "B2", "C2"]]
+    assert sheet["header_row_span"] == 2
+    assert sheet["column_paths"] == [["区域"], ["500", "100"], ["500", "200"]]
+    assert sheet["column_kinds"] == ["dimension", "measure", "measure"]
+    assert sheet["dimension_columns"] == [0]
+    assert sheet["measure_columns"] == [1, 2]
+
+
+def test_save_structure_version_persists_snapshot_and_review_prefers_latest_version(tmp_path) -> None:
+    session_factory, override_get_db = _override_db_session(
+        f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+
+    workbook_path = tmp_path / "source.xlsx"
+    _build_sample_workbook(workbook_path)
+    task_id = _create_uploaded_task(session_factory, workbook_path)
+
+    parse_response = client.post(f"/api/tasks/{task_id}/parse")
+    assert parse_response.status_code == 200
+
+    review_response = client.get(f"/api/tasks/{task_id}/review")
+    assert review_response.status_code == 200
+    review_payload = review_response.json()
+    sheet = review_payload["sheets"][0]
+
+    save_response = client.post(
+        f"/api/tasks/{task_id}/structure-versions",
+        json={
+            "base_structure_version": 0,
+            "sheets": [
+                {
+                    "sheet_id": sheet["sheet_id"],
+                    "sheet_name": sheet["sheet_name"],
+                    "sheet_index": sheet["sheet_index"],
+                    "row_count": sheet["row_count"],
+                    "col_count": sheet["col_count"],
+                    "is_hidden": sheet["is_hidden"],
+                    "merge_ranges": ["A1:B1", "A2:B2"],
+                    "aligned_grid": [["Header", "Header"], ["North", "North"]],
+                    "aligned_cell_roles": [["dimension", "dimension"], ["dimension", "dimension"]],
+                    "aligned_source_map": [["A1", "A1"], ["A2", "A2"]],
+                    "cell_tags": [["header", "header"], ["data", "data"]],
+                }
+            ],
+        },
+    )
+    assert save_response.status_code == 201
+    saved_payload = save_response.json()
+
+    assert saved_payload["task_id"] == task_id
+    assert saved_payload["structure_version"] == 1
+    assert saved_payload["status"] == "waiting_confirm"
+    assert saved_payload["patch_summary"]["sheet_count"] == 1
+    assert saved_payload["patch_summary"]["changed_cell_count"] == 4
+
+    latest_review_response = client.get(f"/api/tasks/{task_id}/review")
+    app.dependency_overrides.clear()
+
+    assert latest_review_response.status_code == 200
+    latest_review_payload = latest_review_response.json()
+    latest_sheet = latest_review_payload["sheets"][0]
+
+    assert latest_review_payload["structure_version"] == 1
+    assert latest_review_payload["editable_structure_version"] == 1
+    assert latest_sheet["merge_ranges"] == ["A1:B1", "A2:B2"]
+    assert latest_sheet["aligned_grid"] == [["Header", "Header"], ["North", "North"]]
+    assert latest_sheet["aligned_cell_roles"] == [
+        ["dimension", "dimension"],
+        ["dimension", "dimension"],
+    ]
+    assert latest_sheet["aligned_source_map"] == [["A1", "A1"], ["A2", "A2"]]
+    assert latest_sheet["cell_tags"] == [["header", "header"], ["data", "data"]]
+
+
+def test_confirm_structure_version_marks_task_confirmed_and_returns_confirmed_version(tmp_path) -> None:
+    session_factory, override_get_db = _override_db_session(
+        f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+
+    workbook_path = tmp_path / "source.xlsx"
+    _build_sample_workbook(workbook_path)
+    task_id = _create_uploaded_task(session_factory, workbook_path)
+
+    parse_response = client.post(f"/api/tasks/{task_id}/parse")
+    assert parse_response.status_code == 200
+
+    review_response = client.get(f"/api/tasks/{task_id}/review")
+    assert review_response.status_code == 200
+    sheet = review_response.json()["sheets"][0]
+
+    save_response = client.post(
+        f"/api/tasks/{task_id}/structure-versions",
+        json={
+            "base_structure_version": 0,
+            "sheets": [
+                {
+                    "sheet_id": sheet["sheet_id"],
+                    "sheet_name": sheet["sheet_name"],
+                    "sheet_index": sheet["sheet_index"],
+                    "row_count": sheet["row_count"],
+                    "col_count": sheet["col_count"],
+                    "is_hidden": sheet["is_hidden"],
+                    "merge_ranges": sheet["merge_ranges"],
+                    "aligned_grid": [["Header", "Header"], ["100", "200"]],
+                    "aligned_cell_roles": [["dimension", "dimension"], ["measure", "measure"]],
+                    "aligned_source_map": [["A1", "A1"], ["A2", "B2"]],
+                    "cell_tags": [["header", "header"], ["data", "data"]],
+                }
+            ],
+        },
+    )
+    assert save_response.status_code == 201
+
+    confirm_response = client.post(
+        f"/api/tasks/{task_id}/confirm",
+        json={"structure_version": 1},
+    )
+    app.dependency_overrides.clear()
+
+    assert confirm_response.status_code == 200
+    payload = confirm_response.json()
+    assert payload["task_id"] == task_id
+    assert payload["status"] == "confirmed"
+    assert payload["structure_version"] == 1
+    assert payload["confirmed_structure_version"] == 1
+
+    with session_factory() as session:
+        task = session.scalar(select(TaskRecordModel).where(TaskRecordModel.id == task_id))
+
+    assert task is not None
+    assert task.status == "confirmed"
+
+
+def test_review_prefers_confirmed_structure_version_over_newer_unconfirmed_draft(tmp_path) -> None:
+    session_factory, override_get_db = _override_db_session(
+        f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+
+    workbook_path = tmp_path / "source.xlsx"
+    _build_sample_workbook(workbook_path)
+    task_id = _create_uploaded_task(session_factory, workbook_path)
+
+    assert client.post(f"/api/tasks/{task_id}/parse").status_code == 200
+    review_response = client.get(f"/api/tasks/{task_id}/review")
+    assert review_response.status_code == 200
+    sheet = review_response.json()["sheets"][0]
+
+    version_one = client.post(
+        f"/api/tasks/{task_id}/structure-versions",
+        json={
+            "base_structure_version": 0,
+            "sheets": [
+                {
+                    "sheet_id": sheet["sheet_id"],
+                    "sheet_name": sheet["sheet_name"],
+                    "sheet_index": sheet["sheet_index"],
+                    "row_count": sheet["row_count"],
+                    "col_count": sheet["col_count"],
+                    "is_hidden": sheet["is_hidden"],
+                    "merge_ranges": ["A1:B1"],
+                    "aligned_grid": [["Header", "Header"], ["North", "South"]],
+                    "aligned_cell_roles": [["dimension", "dimension"], ["dimension", "dimension"]],
+                    "aligned_source_map": [["A1", "A1"], ["A2", "B2"]],
+                    "cell_tags": [["header", "header"], ["data", "data"]],
+                }
+            ],
+        },
+    )
+    assert version_one.status_code == 201
+    assert client.post(f"/api/tasks/{task_id}/confirm", json={"structure_version": 1}).status_code == 200
+
+    version_two = client.post(
+        f"/api/tasks/{task_id}/structure-versions",
+        json={
+            "base_structure_version": 1,
+            "sheets": [
+                {
+                    "sheet_id": sheet["sheet_id"],
+                    "sheet_name": sheet["sheet_name"],
+                    "sheet_index": sheet["sheet_index"],
+                    "row_count": sheet["row_count"],
+                    "col_count": sheet["col_count"],
+                    "is_hidden": sheet["is_hidden"],
+                    "merge_ranges": ["A1:B1", "A2:B2"],
+                    "aligned_grid": [["Header", "Header"], ["Draft", "Draft"]],
+                    "aligned_cell_roles": [["dimension", "dimension"], ["dimension", "dimension"]],
+                    "aligned_source_map": [["A1", "A1"], ["A2", "A2"]],
+                    "cell_tags": [["header", "header"], ["data", "data"]],
+                }
+            ],
+        },
+    )
+    assert version_two.status_code == 201
+
+    latest_review = client.get(f"/api/tasks/{task_id}/review")
+    app.dependency_overrides.clear()
+
+    assert latest_review.status_code == 200
+    payload = latest_review.json()
+    assert payload["status"] == "confirmed"
+    assert payload["structure_version"] == 1
+    assert payload["editable_structure_version"] == 2
+    assert payload["sheets"][0]["aligned_grid"] == [["Header", "Header"], ["North", "South"]]
+
+
+def test_review_recomputes_header_parsing_from_saved_structure_version(tmp_path) -> None:
+    session_factory, override_get_db = _override_db_session(
+        f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+
+    workbook_path = tmp_path / "source.xlsx"
+    _build_sample_workbook(workbook_path)
+    task_id = _create_uploaded_task(session_factory, workbook_path)
+
+    assert client.post(f"/api/tasks/{task_id}/parse").status_code == 200
+    review_response = client.get(f"/api/tasks/{task_id}/review")
+    assert review_response.status_code == 200
+    sheet = review_response.json()["sheets"][0]
+
+    save_response = client.post(
+        f"/api/tasks/{task_id}/structure-versions",
+        json={
+            "base_structure_version": 0,
+            "sheets": [
+                {
+                    "sheet_id": sheet["sheet_id"],
+                    "sheet_name": sheet["sheet_name"],
+                    "sheet_index": sheet["sheet_index"],
+                    "row_count": sheet["row_count"],
+                    "col_count": sheet["col_count"],
+                    "is_hidden": sheet["is_hidden"],
+                    "merge_ranges": ["A1:B1"],
+                    "aligned_grid": [["Q1", "Q1"], ["Revenue", "Cost"]],
+                    "aligned_cell_roles": [["dimension", "dimension"], ["measure", "measure"]],
+                    "aligned_source_map": [["A1", "A1"], ["A2", "B2"]],
+                    "cell_tags": [["header", "header"], ["data", "data"]],
+                }
+            ],
+        },
+    )
+    assert save_response.status_code == 201
+
+    latest_review = client.get(f"/api/tasks/{task_id}/review")
+    app.dependency_overrides.clear()
+
+    assert latest_review.status_code == 200
+    payload = latest_review.json()
+    sheet_payload = payload["sheets"][0]
+    assert sheet_payload["aligned_grid"] == [["Q1", "Q1"], ["Revenue", "Cost"]]
+    assert sheet_payload["header_row_span"] == 1
+    assert sheet_payload["column_paths"] == [["Q1"], ["Q1"]]
+    assert sheet_payload["column_kinds"] == ["dimension", "dimension"]
+
+
+def test_review_does_not_treat_first_data_row_as_header_when_only_row_dimension_continues(tmp_path) -> None:
+    session_factory, override_get_db = _override_db_session(
+        f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+
+    workbook_path = tmp_path / "row-dimension.xlsx"
+    _build_row_dimension_workbook(workbook_path)
+    task_id = _create_uploaded_task(session_factory, workbook_path)
+
+    parse_response = client.post(f"/api/tasks/{task_id}/parse")
+    assert parse_response.status_code == 200
+
+    response = client.get(f"/api/tasks/{task_id}/review")
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    sheet = response.json()["sheets"][0]
+    assert sheet["aligned_grid"] == [["Region", "Revenue"], ["East", "120"]]
+    assert sheet["aligned_cell_roles"] == [["dimension", "dimension"], ["dimension", "measure"]]
+    assert sheet["header_row_span"] == 1
+    assert sheet["column_paths"] == [["Region"], ["Revenue"]]

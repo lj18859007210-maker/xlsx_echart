@@ -34,3 +34,8 @@ class TaskRecordModel(Base):
         back_populates="task",
         cascade="all, delete-orphan",
     )
+    structure_versions: Mapped[list["StructureVersionRecordModel"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="StructureVersionRecordModel.version_number",
+    )

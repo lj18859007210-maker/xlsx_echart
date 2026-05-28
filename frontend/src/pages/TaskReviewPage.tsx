@@ -7,12 +7,19 @@ import {
   splitDraftSelection,
 } from "../modules/review-grid/draftEditing";
 import { selectReviewSheet } from "../modules/review-grid/reviewSelection";
+import {
+  applyDraftSheetsToReview,
+  buildStructureVersionSaveRequest,
+} from "../modules/review-grid/structureVersionPayload";
+import { summarizeHeaderParsing } from "../modules/review-grid/headerSummary";
 import type {
+  ConfirmStructureVersionResponse,
   DraftCellTag,
   DraftReviewSheet,
   DraftSelectionRange,
   GridPoint,
   ReviewSheetSnapshot,
+  StructureVersionSaveResponse,
   TaskReviewResponse,
 } from "../types/review";
 
@@ -38,7 +45,9 @@ export function TaskReviewPage() {
   const [selectionAnchor, setSelectionAnchor] = useState<GridPoint | null>(null);
   const [selectionFocus, setSelectionFocus] = useState<GridPoint | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +55,7 @@ export function TaskReviewPage() {
     async function fetchReview() {
       setLoading(true);
       setError(null);
+      setActionMessage(null);
 
       try {
         const response = await fetch(`${API_BASE_URL}/tasks/${activeTaskId}/review`);
@@ -113,6 +123,8 @@ export function TaskReviewPage() {
   }, [payload, selectedSheetId]);
 
   const selectedDraftSheet = selectedSheetId ? draftSheets[selectedSheetId] ?? null : null;
+  const visibleMergeRanges = selectedDraftSheet?.mergeRanges ?? selectedSheet?.merge_ranges ?? [];
+  const headerSummary = selectedSheet ? summarizeHeaderParsing(selectedSheet) : null;
 
   const selectedRange = useMemo<DraftSelectionRange | null>(() => {
     if (!selectionAnchor || !selectionFocus) {
@@ -200,6 +212,106 @@ export function TaskReviewPage() {
         alignedRoles,
       };
     });
+  }
+
+  async function saveDraft() {
+    if (!payload) {
+      return null;
+    }
+
+    setSaving(true);
+    setError(null);
+    setActionMessage(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/tasks/${payload.task_id}/structure-versions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(buildStructureVersionSaveRequest(payload, draftSheets)),
+      });
+      const data = (await response.json()) as StructureVersionSaveResponse | { detail?: string };
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data === "object" && data && "detail" in data && data.detail
+            ? data.detail
+            : "Failed to save structure draft",
+        );
+      }
+
+      setPayload((current) =>
+        current
+          ? applyDraftSheetsToReview(
+              current,
+              draftSheets,
+              (data as StructureVersionSaveResponse).structure_version,
+              (data as StructureVersionSaveResponse).status,
+            )
+          : current,
+      );
+      setActionMessage(
+        `Saved structure v${(data as StructureVersionSaveResponse).structure_version}`,
+      );
+      return (data as StructureVersionSaveResponse).structure_version;
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to save structure draft");
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmStructure() {
+    if (!payload) {
+      return;
+    }
+
+    const latestStructureVersion = await saveDraft();
+    if (latestStructureVersion === null) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/tasks/${payload.task_id}/confirm`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ structure_version: latestStructureVersion }),
+      });
+      const data = (await response.json()) as ConfirmStructureVersionResponse | { detail?: string };
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data === "object" && data && "detail" in data && data.detail
+            ? data.detail
+            : "Failed to confirm structure",
+        );
+      }
+
+      setPayload((current) =>
+        current
+          ? applyDraftSheetsToReview(
+              current,
+              draftSheets,
+              (data as ConfirmStructureVersionResponse).structure_version,
+              (data as ConfirmStructureVersionResponse).status,
+            )
+          : current,
+      );
+      setActionMessage(
+        `Confirmed structure v${(data as ConfirmStructureVersionResponse).confirmed_structure_version}`,
+      );
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to confirm structure");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const taskSummary = payload
@@ -314,15 +426,34 @@ export function TaskReviewPage() {
               <h2>Ranges</h2>
             </div>
             <div className="merge-list">
-              {(selectedSheet?.merge_ranges ?? []).map((range) => (
+              {visibleMergeRanges.map((range) => (
                 <span className="merge-pill" key={range}>
                   {range}
                 </span>
               ))}
-              {selectedSheet && selectedSheet.merge_ranges.length === 0 && (
+              {selectedSheet && visibleMergeRanges.length === 0 && (
                 <p className="sidebar-message">No merged ranges in this sheet.</p>
               )}
             </div>
+          </div>
+
+          <div className="sidebar-panel">
+            <div className="sidebar-heading">
+              <p className="mini-label">Header Parse</p>
+              <h2>Column Shape</h2>
+            </div>
+            {headerSummary && (
+              <div className="merge-list">
+                <span className="merge-pill">{headerSummary.headerRowSpan} header rows</span>
+                <span className="merge-pill">{headerSummary.dimensionCount} dimension cols</span>
+                <span className="merge-pill">{headerSummary.measureCount} measure cols</span>
+                {headerSummary.previewPaths.map((path) => (
+                  <span className="merge-pill" key={path}>
+                    {path}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="sidebar-panel">
@@ -354,9 +485,21 @@ export function TaskReviewPage() {
               <button className="action-button is-ghost" type="button" onClick={resetSelection}>
                 Clear selection
               </button>
+              <button className="action-button" type="button" onClick={saveDraft} disabled={saving}>
+                {saving ? "Saving..." : "Save draft"}
+              </button>
+              <button
+                className="action-button"
+                type="button"
+                onClick={confirmStructure}
+                disabled={saving}
+              >
+                {saving ? "Working..." : "Confirm structure"}
+              </button>
             </div>
             <p className="sidebar-message">
-              Day 9 edits stay local on the aligned draft layer. Persistence starts on Day 10.
+              {actionMessage ??
+                "Day 10 now saves immutable structure versions before confirmation."}
             </p>
           </div>
         </aside>

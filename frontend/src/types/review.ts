@@ -23,12 +23,22 @@ export type ReviewSheetSnapshot = {
   aligned_grid: Array<Array<string | null>>;
   aligned_cell_roles: Array<Array<string>>;
   aligned_source_map: Array<Array<string | null>>;
+  base_aligned_grid: Array<Array<string | null>>;
+  base_aligned_cell_roles: Array<Array<string>>;
+  base_aligned_source_map: Array<Array<string | null>>;
+  cell_tags: Array<Array<string>>;
+  header_row_span: number;
+  column_paths: Array<Array<string>>;
+  column_kinds: string[];
+  dimension_columns: number[];
+  measure_columns: number[];
 };
 
 export type TaskReviewResponse = {
   task_id: number;
   status: string;
   structure_version: number;
+  editable_structure_version: number;
   sheets: ReviewSheetSnapshot[];
 };
 
@@ -40,6 +50,7 @@ export type DraftMergeBlock = {
   endRow: number;
   startCol: number;
   endCol: number;
+  range: string;
 };
 
 export type DraftReviewSheet = {
@@ -51,6 +62,7 @@ export type DraftReviewSheet = {
   alignedSourceMap: Array<Array<string | null>>;
   alignedRoles: Array<Array<string>>;
   cellTags: Array<Array<DraftCellTag>>;
+  mergeRanges: string[];
   mergeBlocks: DraftMergeBlock[];
 };
 
@@ -64,4 +76,45 @@ export type DraftSelectionRange = {
   endRow: number;
   startCol: number;
   endCol: number;
+};
+
+export type StructureVersionSheetPayload = {
+  sheet_id: number;
+  sheet_name: string;
+  sheet_index: number;
+  row_count: number;
+  col_count: number;
+  is_hidden: boolean;
+  merge_ranges: string[];
+  aligned_grid: Array<Array<string | null>>;
+  aligned_cell_roles: Array<Array<string>>;
+  aligned_source_map: Array<Array<string | null>>;
+  cell_tags: Array<Array<string>>;
+};
+
+export type StructureVersionSaveRequest = {
+  base_structure_version: number;
+  sheets: StructureVersionSheetPayload[];
+};
+
+export type StructureVersionSaveResponse = {
+  task_id: number;
+  status: string;
+  structure_version: number;
+  patch_summary: {
+    sheet_count: number;
+    changed_sheet_ids: number[];
+    changed_cell_count: number;
+  };
+};
+
+export type ConfirmStructureVersionRequest = {
+  structure_version: number;
+};
+
+export type ConfirmStructureVersionResponse = {
+  task_id: number;
+  status: string;
+  structure_version: number;
+  confirmed_structure_version: number;
 };
