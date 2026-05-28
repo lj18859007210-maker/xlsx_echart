@@ -1,6 +1,8 @@
 ﻿from fastapi import APIRouter, Body, Depends
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.models.task_record import TaskRecordModel
 from app.db.session import get_db
 from app.schemas.review_schema import (
     ConfirmStructureVersionRequest,
@@ -10,12 +12,14 @@ from app.schemas.review_schema import (
     TaskReviewResponse,
 )
 from app.schemas.task_schema import (
+    AcknowledgeGapRequest,
+    FormulaRuleListResponse,
     TaskInferFormulaRequest,
     TaskInferFormulaResponse,
     TaskParseResponse,
 )
 from app.services.excel_parse_service import parse_task_workbook
-from app.services.formula import formula_inference_service
+from app.services.formula import formula_inference_service, formula_rule_reader
 from app.services.review_service import (
     build_task_review,
     confirm_structure_version,
@@ -84,3 +88,39 @@ def infer_task_formulas(
         max_candidates_per_sheet=request.max_candidates_per_sheet,
     )
     return TaskInferFormulaResponse(**payload)
+
+
+@router.get("/{task_id}/formula-rules", response_model=FormulaRuleListResponse)
+def get_task_formula_rules(task_id: int, db: Session = Depends(get_db)) -> FormulaRuleListResponse:
+    payload = formula_rule_reader.read_task_formula_rules(task_id, db)
+    return FormulaRuleListResponse(**payload)
+
+
+@router.post("/{task_id}/formula-rules/acknowledge-gap")
+def acknowledge_formula_gap(
+    task_id: int,
+    request: AcknowledgeGapRequest = Body(AcknowledgeGapRequest()),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    rules_payload = formula_rule_reader.read_task_formula_rules(task_id, db)
+    if not rules_payload["has_gap"]:
+        return {
+            "task_id": task_id,
+            "acknowledged": False,
+            "message": "Task has passing rules; no gap to acknowledge",
+        }
+    task = db.scalar(select(TaskRecordModel).where(TaskRecordModel.id == task_id))
+    if task is None:
+        return {
+            "task_id": task_id,
+            "acknowledged": False,
+            "message": "Task not found",
+        }
+    if request.acknowledged:
+        task.status = "formula_gap_acknowledged"
+        db.commit()
+    return {
+        "task_id": task_id,
+        "acknowledged": request.acknowledged,
+        "message": "Formula gap acknowledged — validation stage will be skipped",
+    }

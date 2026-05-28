@@ -35,3 +35,28 @@ class TaskInferFormulaResponse(BaseModel):
     status: str
     accepted_rules: list[FormulaRuleSummary]
     rejected_count: int
+
+
+class FormulaRuleItem(BaseModel):
+    id: int
+    sheet_id: int
+    formula_text: str
+    formula_type: str
+    confidence: float
+    verification_score: float
+    quality_status: str
+
+
+class FormulaRuleListResponse(BaseModel):
+    task_id: int
+    status: str
+    total_inferred: int
+    passed: int
+    filtered: int
+    conflict: int
+    has_gap: bool
+    rules: list[FormulaRuleItem]
+
+
+class AcknowledgeGapRequest(BaseModel):
+    acknowledged: bool = True

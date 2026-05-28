@@ -1,4 +1,4 @@
-from collections.abc import Generator
+﻿from collections.abc import Generator
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -43,7 +43,7 @@ def _override_db_session(database_url: str) -> tuple[sessionmaker[Session], obje
 def _build_sample_workbook(path: Path) -> None:
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = "经营分析"
+    sheet.title = "缁忚惀鍒嗘瀽"
     sheet["A1"] = "Header"
     sheet.merge_cells("A1:B1")
     sheet["A2"] = 100
@@ -55,8 +55,8 @@ def _build_sample_workbook(path: Path) -> None:
 def _build_dual_track_workbook(path: Path) -> None:
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = "双轨"
-    sheet["A1"] = "区域"
+    sheet.title = "鍙岃建"
+    sheet["A1"] = "鍖哄煙"
     sheet.merge_cells("A1:A2")
     sheet["B1"] = 500
     sheet.merge_cells("B1:C1")
@@ -121,7 +121,7 @@ def test_review_returns_task_level_sheet_snapshots(tmp_path) -> None:
     assert len(payload["sheets"]) == 1
 
     sheet = payload["sheets"][0]
-    assert sheet["sheet_name"] == "经营分析"
+    assert sheet["sheet_name"] == "缁忚惀鍒嗘瀽"
     assert sheet["row_count"] == 2
     assert sheet["col_count"] == 2
     assert sheet["merge_ranges"] == ["A1:B1"]
@@ -172,15 +172,15 @@ def test_review_builds_dual_track_alignment_for_dimension_and_measure_merges(tmp
     payload = response.json()
     sheet = payload["sheets"][0]
 
-    assert sheet["grid_snapshot"] == [["区域", "500", None], [None, "100", "200"]]
-    assert sheet["aligned_grid"] == [["区域", "500", None], ["区域", "100", "200"]]
+    assert sheet["grid_snapshot"] == [["鍖哄煙", "500", None], [None, "100", "200"]]
+    assert sheet["aligned_grid"] == [["鍖哄煙", "500", None], ["鍖哄煙", "100", "200"]]
     assert sheet["aligned_cell_roles"] == [
         ["dimension", "measure", "measure"],
         ["dimension", "measure", "measure"],
     ]
     assert sheet["aligned_source_map"] == [["A1", "B1", "C1"], ["A1", "B2", "C2"]]
     assert sheet["header_row_span"] == 2
-    assert sheet["column_paths"] == [["区域"], ["500", "100"], ["500", "200"]]
+    assert sheet["column_paths"] == [["鍖哄煙"], ["500", "100"], ["500", "200"]]
     assert sheet["column_kinds"] == ["dimension", "measure", "measure"]
     assert sheet["dimension_columns"] == [0]
     assert sheet["measure_columns"] == [1, 2]
@@ -543,3 +543,235 @@ def test_infer_formulas_returns_empty_when_llm_unavailable(tmp_path, monkeypatch
     assert payload["task_id"] == task_id
     assert payload["accepted_rules"] == []
     assert payload["rejected_count"] == 0
+
+
+def test_formula_rules_endpoint_returns_filtered_rules(tmp_path) -> None:
+    session_factory, override_get_db = _override_db_session(
+        f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+
+    workbook_path = tmp_path / "source.xlsx"
+    _build_sample_workbook(workbook_path)
+    task_id = _create_uploaded_task(session_factory, workbook_path)
+
+    assert client.post(f"/api/tasks/{task_id}/parse").status_code == 200
+
+    review = client.get(f"/api/tasks/{task_id}/review")
+    assert review.status_code == 200
+    sheet = review.json()["sheets"][0]
+
+    assert client.post(
+        f"/api/tasks/{task_id}/structure-versions",
+        json={
+            "base_structure_version": 0,
+            "sheets": [
+                {
+                    "sheet_id": sheet["sheet_id"],
+                    "sheet_name": sheet["sheet_name"],
+                    "sheet_index": sheet["sheet_index"],
+                    "row_count": sheet["row_count"],
+                    "col_count": sheet["col_count"],
+                    "is_hidden": sheet["is_hidden"],
+                    "merge_ranges": sheet["merge_ranges"],
+                    "aligned_grid": sheet["aligned_grid"],
+                    "aligned_cell_roles": sheet["aligned_cell_roles"],
+                    "aligned_source_map": sheet["aligned_source_map"],
+                    "cell_tags": sheet.get("cell_tags", []),
+                }
+            ],
+        },
+    ).status_code == 201
+    assert client.post(f"/api/tasks/{task_id}/confirm", json={"structure_version": 1}).status_code == 200
+
+    from app.db.models.formula_rule_record import FormulaRuleRecordModel
+
+    with session_factory() as session:
+        session.add(
+            FormulaRuleRecordModel(
+                task_id=task_id,
+                sheet_id=sheet["sheet_id"],
+                formula_text="col_B = col_A + 10",
+                formula_type="column_arithmetic",
+                description="rule a",
+                confidence=0.9,
+                verification_passed=True,
+                verification_score=0.8,
+                prompt_version="day13_v1",
+                model_name="mock/day13",
+            )
+        )
+        session.add(
+            FormulaRuleRecordModel(
+                task_id=task_id,
+                sheet_id=sheet["sheet_id"],
+                formula_text="col_B = col_A + 10",
+                formula_type="column_arithmetic",
+                description="rule a dup",
+                confidence=0.5,
+                verification_passed=True,
+                verification_score=0.7,
+                prompt_version="day13_v1",
+                model_name="mock/day13",
+            )
+        )
+        session.commit()
+
+    response = client.get(f"/api/tasks/{task_id}/formula-rules")
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_inferred"] == 2
+    assert payload["passed"] == 1
+    assert payload["filtered"] == 1
+    assert payload["conflict"] == 0
+
+
+def test_formula_rules_has_gap_when_no_passing_rules(tmp_path) -> None:
+    session_factory, override_get_db = _override_db_session(
+        f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+
+    workbook_path = tmp_path / "source.xlsx"
+    _build_sample_workbook(workbook_path)
+    task_id = _create_uploaded_task(session_factory, workbook_path)
+
+    assert client.post(f"/api/tasks/{task_id}/parse").status_code == 200
+    review = client.get(f"/api/tasks/{task_id}/review")
+    sheet = review.json()["sheets"][0]
+
+    assert client.post(
+        f"/api/tasks/{task_id}/structure-versions",
+        json={
+            "base_structure_version": 0,
+            "sheets": [
+                {
+                    "sheet_id": sheet["sheet_id"],
+                    "sheet_name": sheet["sheet_name"],
+                    "sheet_index": sheet["sheet_index"],
+                    "row_count": sheet["row_count"],
+                    "col_count": sheet["col_count"],
+                    "is_hidden": sheet["is_hidden"],
+                    "merge_ranges": sheet["merge_ranges"],
+                    "aligned_grid": sheet["aligned_grid"],
+                    "aligned_cell_roles": sheet["aligned_cell_roles"],
+                    "aligned_source_map": sheet["aligned_source_map"],
+                    "cell_tags": sheet.get("cell_tags", []),
+                }
+            ],
+        },
+    ).status_code == 201
+    assert client.post(f"/api/tasks/{task_id}/confirm", json={"structure_version": 1}).status_code == 200
+
+    from app.db.models.formula_rule_record import FormulaRuleRecordModel
+
+    with session_factory() as session:
+        session.add(
+            FormulaRuleRecordModel(
+                task_id=task_id,
+                sheet_id=sheet["sheet_id"],
+                formula_text="col_B = col_A + 10",
+                formula_type="column_arithmetic",
+                description="low quality",
+                confidence=0.1,
+                verification_passed=True,
+                verification_score=0.05,
+                prompt_version="day13_v1",
+                model_name="mock/day13",
+            )
+        )
+        session.commit()
+
+    response = client.get(f"/api/tasks/{task_id}/formula-rules")
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["has_gap"] is True
+    assert payload["passed"] == 0
+
+
+def test_acknowledge_gap_returns_success_for_gapped_task(tmp_path) -> None:
+    session_factory, override_get_db = _override_db_session(
+        f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+
+    workbook_path = tmp_path / "source.xlsx"
+    _build_sample_workbook(workbook_path)
+    task_id = _create_uploaded_task(session_factory, workbook_path)
+
+    assert client.post(f"/api/tasks/{task_id}/parse").status_code == 200
+    review = client.get(f"/api/tasks/{task_id}/review")
+    sheet = review.json()["sheets"][0]
+
+    assert client.post(
+        f"/api/tasks/{task_id}/structure-versions",
+        json={
+            "base_structure_version": 0,
+            "sheets": [
+                {
+                    "sheet_id": sheet["sheet_id"],
+                    "sheet_name": sheet["sheet_name"],
+                    "sheet_index": sheet["sheet_index"],
+                    "row_count": sheet["row_count"],
+                    "col_count": sheet["col_count"],
+                    "is_hidden": sheet["is_hidden"],
+                    "merge_ranges": sheet["merge_ranges"],
+                    "aligned_grid": sheet["aligned_grid"],
+                    "aligned_cell_roles": sheet["aligned_cell_roles"],
+                    "aligned_source_map": sheet["aligned_source_map"],
+                    "cell_tags": sheet.get("cell_tags", []),
+                }
+            ],
+        },
+    ).status_code == 201
+    assert client.post(f"/api/tasks/{task_id}/confirm", json={"structure_version": 1}).status_code == 200
+
+    from app.db.models.formula_rule_record import FormulaRuleRecordModel
+
+    with session_factory() as session:
+        session.add(
+            FormulaRuleRecordModel(
+                task_id=task_id,
+                sheet_id=sheet["sheet_id"],
+                formula_text="col_B = col_A + 10",
+                formula_type="column_arithmetic",
+                description="low quality",
+                confidence=0.1,
+                verification_passed=True,
+                verification_score=0.05,
+                prompt_version="day13_v1",
+                model_name="mock/day13",
+            )
+        )
+        session.commit()
+
+    response = client.post(
+        f"/api/tasks/{task_id}/formula-rules/acknowledge-gap",
+        json={"acknowledged": True},
+    )
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["acknowledged"] is True
+    assert "gap acknowledged" in payload["message"]
+
+    # Verify task status was updated
+    from sqlalchemy import select as sel
+
+    from app.db.models.task_record import TaskRecordModel
+    with session_factory() as session:
+        task = session.scalar(
+            sel(TaskRecordModel).where(TaskRecordModel.id == task_id),
+        )
+        assert task is not None
+        assert task.status == "formula_gap_acknowledged"
+
+

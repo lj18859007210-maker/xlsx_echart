@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from pydantic import ValidationError
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -297,3 +297,61 @@ def test_inference_returns_empty_rules_when_model_output_is_invalid(tmp_path, mo
 
     assert payload["accepted_rules"] == []
     assert payload["rejected_count"] == 0
+
+
+def test_audit_logger_emits_start_and_complete(caplog, tmp_path, monkeypatch) -> None:
+    import logging
+
+    caplog.set_level(logging.INFO, logger="formula_audit")
+
+    session_factory = _override_db_session(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
+    task_id = _create_confirmed_formula_task(session_factory)
+
+    monkeypatch.setattr(
+        formula_inference_service.llm_formula_client,
+        "run_formula_inference",
+        lambda **_: {
+            "sheet_candidates": [
+                {
+                    "sheet_id": 1,
+                    "candidates": [
+                        {
+                            "formula_text": "col_Profit = col_Revenue - col_Cost",
+                            "confidence": 0.92,
+                            "rationale": "profit equals revenue minus cost",
+                        },
+                    ],
+                }
+            ]
+        },
+    )
+
+    with session_factory() as session:
+        formula_inference_service.infer_task_formulas(
+            task_id,
+            session,
+            model_name="mock/day13",
+        )
+
+    start_events = [
+        r for r in caplog.records
+        if r.name == "formula_audit" and "inference_start" in r.message
+    ]
+    complete_events = [
+        r for r in caplog.records
+        if r.name == "formula_audit" and "inference_complete" in r.message
+    ]
+
+    assert len(start_events) == 1
+    assert len(complete_events) == 1
+
+    import json
+
+    complete_payload = json.loads(complete_events[0].message)
+    assert complete_payload["accepted"] == 1
+    assert complete_payload["rejected"] == 0
+    assert complete_payload["duration_ms"] >= 0
+    assert complete_payload["confidence_p50"] == 0.92
+    assert "rejection_reasons" in complete_payload
+
+

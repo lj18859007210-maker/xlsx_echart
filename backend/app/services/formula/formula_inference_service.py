@@ -16,6 +16,7 @@ from app.db.models.task_record import TaskRecordModel
 
 from ..grid_builder import build_sheet_payload
 from . import llm_formula_client
+from .audit_logger import log_inference_complete, log_inference_start
 from .formula_candidate_schema import FormulaCandidateResponse
 from .formula_exceptions import FormulaError
 from .formula_parser import FormulaParser
@@ -60,6 +61,12 @@ def infer_task_formulas(
         max_candidates_per_sheet=max_candidates_per_sheet,
     )
 
+    start_ts = log_inference_start(
+        task_id=task.id,
+        sheet_count=len(sheets_payload),
+        model_name=resolved_model,
+    )
+
     try:
         raw_response = llm_formula_client.run_formula_inference(
             prompt=prompt,
@@ -67,6 +74,14 @@ def infer_task_formulas(
         )
     except Exception:
         logger.exception("LLM formula inference call failed")
+        log_inference_complete(
+            task_id=task.id,
+            start_ts=start_ts,
+            accepted=0,
+            rejected=0,
+            confidences=[],
+            rejection_reasons={"llm_call_failed": 1},
+        )
         return {
             "task_id": task.id,
             "status": task.status,
@@ -78,6 +93,14 @@ def infer_task_formulas(
         candidate_response = FormulaCandidateResponse.model_validate(raw_response)
     except ValidationError:
         logger.warning("FormulaCandidateResponse validation failed", exc_info=True)
+        log_inference_complete(
+            task_id=task.id,
+            start_ts=start_ts,
+            accepted=0,
+            rejected=0,
+            confidences=[],
+            rejection_reasons={"json_validation_failed": 1},
+        )
         return {
             "task_id": task.id,
             "status": task.status,
@@ -89,26 +112,37 @@ def infer_task_formulas(
 
     accepted_rules: list[dict[str, object]] = []
     rejected_count = 0
+    confidences: list[float] = []
+    rejection_reasons: dict[str, int] = {}
 
     for sheet_candidate in candidate_response.sheet_candidates:
         sheet_id = sheet_candidate.sheet_id
         sheet_payload = sheets_by_id.get(sheet_id)
         if sheet_payload is None:
             rejected_count += len(sheet_candidate.candidates)
+            rejection_reasons["unknown_sheet"] = (
+                rejection_reasons.get("unknown_sheet", 0) + len(sheet_candidate.candidates)
+            )
             continue
 
         available_cols = _collect_column_refs(sheet_payload)
         validator = FormulaValidator(available_columns=available_cols)
 
         for candidate in sheet_candidate.candidates:
+            confidences.append(candidate.confidence)
+
             rule = _parse_candidate(candidate.formula_text)
             if rule is None:
                 rejected_count += 1
+                rejection_reasons["parse_error"] = rejection_reasons.get("parse_error", 0) + 1
                 continue
 
             validation_issues = validator.validate(rule)
             if validation_issues:
                 rejected_count += 1
+                rejection_reasons["validation_failed"] = (
+                    rejection_reasons.get("validation_failed", 0) + 1
+                )
                 continue
 
             verification_score = verify_formula_candidate(
@@ -118,6 +152,9 @@ def infer_task_formulas(
 
             if verification_score <= 0.0:
                 rejected_count += 1
+                rejection_reasons["verification_zero"] = (
+                    rejection_reasons.get("verification_zero", 0) + 1
+                )
                 continue
 
             record = FormulaRuleRecordModel(
@@ -152,6 +189,15 @@ def infer_task_formulas(
 
     db.commit()
 
+    log_inference_complete(
+        task_id=task.id,
+        start_ts=start_ts,
+        accepted=len(accepted_rules),
+        rejected=rejected_count,
+        confidences=confidences,
+        rejection_reasons=rejection_reasons,
+    )
+
     return {
         "task_id": task.id,
         "status": task.status,
@@ -182,3 +228,4 @@ def _parse_candidate(formula_text: str):
         return FormulaParser().parse(formula_text)
     except FormulaError:
         return None
+

@@ -76,3 +76,23 @@ cd backend
 python -m pytest tests/unit/test_formula_inference_service.py -v
 python -m pytest tests/unit/test_task_review.py -k infer_formulas -v
 ```
+
+
+## Day 14 公式兜底与清洗
+
+### 新增端点
+
+- `GET /api/tasks/{task_id}/formula-rules` — 返回质量过滤后的规则列表及统计
+- `POST /api/tasks/{task_id}/formula-rules/acknowledge-gap` — 确认空规则集，跳过后续校验
+
+### 环境变量（新增）
+
+- `FORMULA_QUALITY_THRESHOLD` — 公式质量最低分数阈值，默认 0.3
+
+### 本地验证
+
+```bash
+cd backend
+python -m pytest tests/unit/test_formula_quality_filter.py -v
+python -m pytest tests/unit/test_task_review.py -k "formula_rules or acknowledge" -v
+```
