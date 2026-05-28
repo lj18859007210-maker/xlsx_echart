@@ -7,10 +7,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.db.models.anomaly_issue_record import AnomalyIssueRecordModel
     from app.db.models.file_record import FileRecordModel
     from app.db.models.formula_rule_record import FormulaRuleRecordModel
     from app.db.models.sheet_record import SheetRecordModel
     from app.db.models.structure_version_record import StructureVersionRecordModel
+    from app.db.models.validation_issue_record import ValidationIssueRecordModel
 
 
 class TaskRecordModel(Base):
@@ -47,6 +49,14 @@ class TaskRecordModel(Base):
         order_by="StructureVersionRecordModel.version_number",
     )
     formula_rules: Mapped[list["FormulaRuleRecordModel"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+    validation_issues: Mapped[list["ValidationIssueRecordModel"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+    anomaly_issues: Mapped[list["AnomalyIssueRecordModel"]] = relationship(
         back_populates="task",
         cascade="all, delete-orphan",
     )

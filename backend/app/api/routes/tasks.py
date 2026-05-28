@@ -1,9 +1,10 @@
-﻿from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models.task_record import TaskRecordModel
 from app.db.session import get_db
+from app.schemas.anomaly_schema import AnomalyDetectionResult, AnomalyIssueListResponse
 from app.schemas.review_schema import (
     ConfirmStructureVersionRequest,
     ConfirmStructureVersionResponse,
@@ -18,6 +19,8 @@ from app.schemas.task_schema import (
     TaskInferFormulaResponse,
     TaskParseResponse,
 )
+from app.schemas.validation_schema import ValidationIssueListResponse, ValidationResult
+from app.services.anomaly import anomaly_service
 from app.services.excel_parse_service import parse_task_workbook
 from app.services.formula import formula_inference_service, formula_rule_reader
 from app.services.review_service import (
@@ -25,6 +28,7 @@ from app.services.review_service import (
     confirm_structure_version,
     save_structure_version,
 )
+from app.services.validation import validation_service
 
 router = APIRouter()
 
@@ -124,3 +128,36 @@ def acknowledge_formula_gap(
         "acknowledged": request.acknowledged,
         "message": "Formula gap acknowledged — validation stage will be skipped",
     }
+
+
+@router.post("/{task_id}/validate", response_model=ValidationResult)
+def validate_task(task_id: int, db: Session = Depends(get_db)) -> ValidationResult:
+    payload = validation_service.validate_task_formulas(task_id, db)
+    return ValidationResult(**payload)
+
+
+@router.get("/{task_id}/validation-issues", response_model=ValidationIssueListResponse)
+def get_task_validation_issues(
+    task_id: int,
+    db: Session = Depends(get_db),
+) -> ValidationIssueListResponse:
+    issues = validation_service.get_validation_issues(task_id, db)
+    return ValidationIssueListResponse(task_id=task_id, total=len(issues), issues=issues)
+
+
+@router.post("/{task_id}/detect-anomalies", response_model=AnomalyDetectionResult)
+def detect_task_anomalies(
+    task_id: int,
+    db: Session = Depends(get_db),
+) -> AnomalyDetectionResult:
+    payload = anomaly_service.detect_task_anomalies(task_id, db)
+    return AnomalyDetectionResult(**payload)
+
+
+@router.get("/{task_id}/anomaly-issues", response_model=AnomalyIssueListResponse)
+def get_task_anomaly_issues(
+    task_id: int,
+    db: Session = Depends(get_db),
+) -> AnomalyIssueListResponse:
+    issues = anomaly_service.get_anomaly_issues(task_id, db)
+    return AnomalyIssueListResponse(task_id=task_id, total=len(issues), issues=issues)

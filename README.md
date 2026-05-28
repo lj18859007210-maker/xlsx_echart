@@ -96,3 +96,17 @@ cd backend
 python -m pytest tests/unit/test_formula_quality_filter.py -v
 python -m pytest tests/unit/test_task_review.py -k "formula_rules or acknowledge" -v
 ```
+
+
+## Day 15 校验引擎
+
+### 新增端点
+
+- `POST /api/tasks/{task_id}/validate` — 执行公式校验，返回逐行/汇总误差清单
+
+### 本地验证
+
+```bash
+cd backend
+python -m pytest tests/unit/test_execution_plan.py tests/unit/test_row_validator.py tests/unit/test_aggregate_validator.py tests/unit/test_validation_service.py -v
+```
