@@ -6,6 +6,7 @@ from app.db.models.task_record import TaskRecordModel
 from app.db.session import get_db
 from app.schemas.analysis_schema import AnalysisResponse
 from app.schemas.anomaly_schema import AnomalyDetectionResult, AnomalyIssueListResponse
+from app.schemas.chart_schema import ChartRecommendResponse, ChartSpecListResponse
 from app.schemas.review_schema import (
     ConfirmStructureVersionRequest,
     ConfirmStructureVersionResponse,
@@ -24,6 +25,7 @@ from app.schemas.task_schema import (
 from app.schemas.validation_schema import ValidationIssueListResponse, ValidationResult
 from app.services.analysis import analysis_service
 from app.services.anomaly import anomaly_service
+from app.services.chart_recommendation import chart_service
 from app.services.excel_parse_service import parse_task_workbook
 from app.services.formula import formula_inference_service, formula_rule_reader
 from app.services.review_service import (
@@ -207,3 +209,24 @@ def get_task_insights(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="No insights found for this task")
     return AnalysisResponse(**payload)
+
+
+@router.post("/{task_id}/recommend-charts", response_model=ChartRecommendResponse)
+def recommend_task_charts(
+    task_id: int,
+    db: Session = Depends(get_db),
+) -> ChartRecommendResponse:
+    payload = chart_service.recommend_charts(task_id, db)
+    return ChartRecommendResponse(**payload)
+
+
+@router.get("/{task_id}/chart-specs", response_model=ChartSpecListResponse)
+def get_task_chart_specs(
+    task_id: int,
+    db: Session = Depends(get_db),
+) -> ChartSpecListResponse:
+    payload = chart_service.get_chart_specs(task_id, db)
+    if payload is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No chart specs found for this task")
+    return ChartSpecListResponse(**payload)
