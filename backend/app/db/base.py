@@ -13,6 +13,7 @@ from app.db.models import (  # noqa: E402,F401
     formula_rule_record,
     sheet_record,
     structure_version_record,
+    summary_record,
     task_record,
     validation_issue_record,
 )

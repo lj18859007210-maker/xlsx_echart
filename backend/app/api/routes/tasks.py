@@ -12,6 +12,7 @@ from app.schemas.review_schema import (
     StructureVersionSaveResponse,
     TaskReviewResponse,
 )
+from app.schemas.summary_schema import SummaryResponse
 from app.schemas.task_schema import (
     AcknowledgeGapRequest,
     FormulaRuleListResponse,
@@ -28,6 +29,7 @@ from app.services.review_service import (
     confirm_structure_version,
     save_structure_version,
 )
+from app.services.summarize import summarize_service
 from app.services.validation import validation_service
 
 router = APIRouter()
@@ -126,7 +128,7 @@ def acknowledge_formula_gap(
     return {
         "task_id": task_id,
         "acknowledged": request.acknowledged,
-        "message": "Formula gap acknowledged — validation stage will be skipped",
+        "message": "Formula gap acknowledged - validation stage will be skipped",
     }
 
 
@@ -161,3 +163,24 @@ def get_task_anomaly_issues(
 ) -> AnomalyIssueListResponse:
     issues = anomaly_service.get_anomaly_issues(task_id, db)
     return AnomalyIssueListResponse(task_id=task_id, total=len(issues), issues=issues)
+
+
+@router.post("/{task_id}/summarize", response_model=SummaryResponse)
+def summarize_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+) -> SummaryResponse:
+    payload = summarize_service.summarize_task(task_id, db)
+    return SummaryResponse(**payload)
+
+
+@router.get("/{task_id}/summary", response_model=SummaryResponse)
+def get_task_summary(
+    task_id: int,
+    db: Session = Depends(get_db),
+) -> SummaryResponse:
+    payload = summarize_service.get_summary(task_id, db)
+    if payload is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No summary found for this task")
+    return SummaryResponse(**payload)
