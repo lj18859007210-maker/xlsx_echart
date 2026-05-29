@@ -211,7 +211,7 @@ def test_llm_client_builds_json_request_payload() -> None:
 
     assert payload == {
         "model": "mock/day13",
-        "prompt": "infer formulas",
+        "messages": [{"role": "user", "content": "infer formulas"}],
         "response_format": {"type": "json_object"},
     }
 

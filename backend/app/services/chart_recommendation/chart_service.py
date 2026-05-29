@@ -10,6 +10,7 @@ from app.db.models.chart_spec_record import ChartSpecRecordModel
 from app.db.models.insight_record import InsightRecordModel
 from app.db.models.task_record import TaskRecordModel
 from app.services.structure_version_service import preferred_structure_version
+from app.services.grid_builder import with_header_parsing
 
 from .chart_rule_selector import select_chart_types
 from .chart_spec_builder import build_chart_spec
@@ -65,6 +66,8 @@ def recommend_charts(
 
     for sheet_data in sheets_data:
         sheet_name = str(sheet_data.get("sheet_name", ""))
+        if "aligned_cell_roles" in sheet_data:
+            sheet_data = with_header_parsing(sheet_data)
         aligned_grid = sheet_data.get("aligned_grid", [])
         column_kinds = sheet_data.get("column_kinds", [])
         column_paths = sheet_data.get("column_paths", [])

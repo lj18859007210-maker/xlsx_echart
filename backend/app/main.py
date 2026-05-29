@@ -5,6 +5,8 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.logging import setup_logging, get_logger
 from app.core.error_handler import register_error_handlers
+from app.db.base import Base
+from app.db.session import engine
 
 setup_logging()
 logger = get_logger(__name__)
@@ -33,6 +35,10 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     logger.info("app_created", debug=settings.app_debug)
+    @app.on_event("startup")
+    def _create_tables():
+        Base.metadata.create_all(bind=engine)
+
     return app
 
 

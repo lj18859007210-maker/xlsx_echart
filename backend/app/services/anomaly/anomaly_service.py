@@ -1,4 +1,4 @@
-"""Day 17-18 anomaly detection orchestration service with IQR support."""
+﻿"""Day 17-18 anomaly detection orchestration service with IQR support."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db.models.anomaly_issue_record import AnomalyIssueRecordModel
 from app.db.models.task_record import TaskRecordModel
 from app.services.structure_version_service import preferred_structure_version
+from app.services.grid_builder import with_header_parsing
 
 from .decline_detector import detect_consecutive_declines
 from .growth_rate_detector import detect_growth_rate_anomalies
@@ -60,6 +61,8 @@ def detect_task_anomalies(
 
     for sheet_data in sheets_data:
         sheet_id = int(sheet_data.get("sheet_id", 0))
+        if "aligned_cell_roles" in sheet_data:
+            sheet_data = with_header_parsing(sheet_data)
         aligned_grid = sheet_data.get("aligned_grid", [])
         column_paths = sheet_data.get("column_paths", [])
         column_kinds = sheet_data.get("column_kinds", [])

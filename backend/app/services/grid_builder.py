@@ -1,4 +1,5 @@
-﻿"""Grid construction, cell classification, and header parsing for review payloads."""
+import re
+"""Grid construction, cell classification, and header parsing for review payloads."""
 
 from decimal import Decimal, InvalidOperation
 
@@ -189,6 +190,27 @@ def infer_header_row_span(
     return header_row_span
 
 
+
+def _infer_kind_from_data(
+    aligned_grid: list[list[str | None]],
+    col_index: int,
+    header_row_span: int,
+) -> str | None:
+    """Infer column kind from data values (numeric detection)."""
+    numeric_count = 0
+    total_count = 0
+    numeric_pattern = re.compile(r'^-?\d+(\.\d+)?$')
+    for row_index in range(header_row_span, len(aligned_grid)):
+        val = aligned_grid[row_index][col_index]
+        if val is None or str(val).strip() == '':
+            continue
+        total_count += 1
+        if numeric_pattern.match(str(val).strip()):
+            numeric_count += 1
+    if total_count > 0 and numeric_count / total_count >= 0.6:
+        return 'measure'
+    return None
+
 def build_column_paths(
     aligned_grid: list[list[str | None]],
     aligned_roles: list[list[str]],
@@ -232,6 +254,12 @@ def build_column_paths(
             if candidate_role != "empty":
                 role = candidate_role
                 break
+
+        # Data-driven override: if role is "dimension" but column values are numeric, treat as "measure"
+        if role == "dimension":
+            inferred = _infer_kind_from_data(aligned_grid, col_index, header_row_span)
+            if inferred == "measure":
+                role = "measure"
 
         column_paths.append(path)
         column_kinds.append(role)

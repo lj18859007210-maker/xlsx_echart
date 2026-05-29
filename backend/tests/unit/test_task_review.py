@@ -132,9 +132,9 @@ def test_review_returns_task_level_sheet_snapshots(tmp_path) -> None:
     assert sheet["aligned_source_map"] == [["A1", "A1"], ["A2", "B2"]]
     assert sheet["header_row_span"] == 1
     assert sheet["column_paths"] == [["Header"], ["Header"]]
-    assert sheet["column_kinds"] == ["dimension", "dimension"]
-    assert sheet["dimension_columns"] == [0, 1]
-    assert sheet["measure_columns"] == []
+    assert sheet["column_kinds"] == ["measure", "measure"]  # data-driven: numeric values -> measure
+    assert sheet["dimension_columns"] == []  # data-driven: both columns are numeric -> measure
+    assert sheet["measure_columns"] == [0, 1]  # data-driven: numeric values -> measure
     assert sheet["raw_cells"][0]["address"] == "A1"
     assert sheet["raw_cells"][0]["merge_range"] == "A1:B1"
 

@@ -190,10 +190,11 @@ def save_structure_version(
 
     next_version_number = base_structure_version + 1
     patch_summary = build_patch_summary(base_sheets, request_sheets)
+    enriched_sheets = [with_header_parsing(dict(s)) for s in request_sheets]
     structure_version = StructureVersionRecordModel(
         task_id=task.id,
         version_number=next_version_number,
-        snapshot_json={"sheets": request_sheets},
+        snapshot_json={"sheets": enriched_sheets},
         patch_summary_json=patch_summary,
         is_confirmed=False,
     )

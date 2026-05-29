@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   DraftReviewSheet,
   StructureVersionSaveRequest,
   TaskReviewResponse,
@@ -25,6 +25,11 @@ export function buildStructureVersionSaveRequest(
         aligned_cell_roles: draftSheet?.alignedRoles ?? sheet.aligned_cell_roles,
         aligned_source_map: draftSheet?.alignedSourceMap ?? sheet.aligned_source_map,
         cell_tags: draftSheet?.cellTags ?? sheet.cell_tags,
+        column_kinds: sheet.column_kinds,
+        column_paths: sheet.column_paths,
+        dimension_columns: sheet.dimension_columns,
+        measure_columns: sheet.measure_columns,
+        header_row_span: sheet.header_row_span,
       };
     }),
   };
@@ -56,6 +61,11 @@ export function applyDraftSheetsToReview(
         aligned_cell_roles: draftSheet.alignedRoles,
         aligned_source_map: draftSheet.alignedSourceMap,
         cell_tags: draftSheet.cellTags,
+        column_kinds: sheet.column_kinds,
+        column_paths: sheet.column_paths,
+        dimension_columns: sheet.dimension_columns,
+        measure_columns: sheet.measure_columns,
+        header_row_span: sheet.header_row_span,
         ...headerParsing,
       };
     }),

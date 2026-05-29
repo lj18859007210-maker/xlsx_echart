@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
 import type { ReviewSheetSnapshot } from "../src/types/review";
 import {
@@ -169,6 +169,11 @@ describe("draftEditing", () => {
           ["header", "header"],
           ["data", "data"],
         ],
+        column_kinds: ["dimension", "dimension"],
+        column_paths: [["Region"], ["Product"]],
+        dimension_columns: [0, 1],
+        measure_columns: [],
+        header_row_span: 1,
       },
     ]);
   });

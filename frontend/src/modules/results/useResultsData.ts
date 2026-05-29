@@ -40,7 +40,7 @@ export function useResultsData(taskId: string): ResultsData {
       try {
         const [
           sumRes, insRes, chartRes, valRes, anoRes,
-        ] = await Promise.all([
+        ] = await Promise.allSettled([
           api.get(`/tasks/${taskId}/summary`),
           api.get(`/tasks/${taskId}/insights`),
           api.get(`/tasks/${taskId}/chart-specs`),
@@ -49,16 +49,16 @@ export function useResultsData(taskId: string): ResultsData {
         ]);
 
         if (!cancelled) {
-          if (sumRes.ok) setSummary(await sumRes.json());
-          if (insRes.ok) setInsight(await insRes.json());
-          if (chartRes.ok) setChartSpecs(await chartRes.json());
+          if (sumRes.status === "fulfilled") setSummary(sumRes.value as SummaryRecord);
+          if (insRes.status === "fulfilled") setInsight(insRes.value as InsightRecord);
+          if (chartRes.status === "fulfilled") setChartSpecs(chartRes.value as ChartSpecRecord);
 
-          if (valRes.ok) {
-            const v = await valRes.json();
+          if (valRes.status === "fulfilled") {
+            const v = valRes.value as { issues?: ValidationIssueItem[] };
             setValidationIssues(v.issues ?? []);
           }
-          if (anoRes.ok) {
-            const a = await anoRes.json();
+          if (anoRes.status === "fulfilled") {
+            const a = anoRes.value as { issues?: AnomalyIssueItem[] };
             setAnomalyIssues(a.issues ?? []);
           }
         }

@@ -1,4 +1,4 @@
-export type RawCellItem = {
+﻿export type RawCellItem = {
   address: string;
   row_index: number;
   col_index: number;
@@ -27,6 +27,11 @@ export type ReviewSheetSnapshot = {
   base_aligned_cell_roles: Array<Array<string>>;
   base_aligned_source_map: Array<Array<string | null>>;
   cell_tags: Array<Array<string>>;
+  column_kinds: string[];
+  column_paths: Array<Array<string>>;
+  dimension_columns: number[];
+  measure_columns: number[];
+  header_row_span: number;
   header_row_span: number;
   column_paths: Array<Array<string>>;
   column_kinds: string[];
@@ -90,6 +95,11 @@ export type StructureVersionSheetPayload = {
   aligned_cell_roles: Array<Array<string>>;
   aligned_source_map: Array<Array<string | null>>;
   cell_tags: Array<Array<string>>;
+  column_kinds: string[];
+  column_paths: Array<Array<string>>;
+  dimension_columns: number[];
+  measure_columns: number[];
+  header_row_span: number;
 };
 
 export type StructureVersionSaveRequest = {

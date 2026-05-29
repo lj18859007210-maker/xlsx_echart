@@ -39,7 +39,7 @@ def _load_mock() -> dict[str, object]:
 def build_formula_inference_request_payload(prompt: str, model_name: str) -> dict[str, object]:
     return {
         "model": model_name,
-        "prompt": prompt,
+        "messages": [{"role": "user", "content": prompt}],
         "response_format": {"type": "json_object"},
     }
 

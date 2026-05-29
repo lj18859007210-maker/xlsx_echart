@@ -1,4 +1,4 @@
-"""Day 19 - summarization orchestration service."""
+﻿"""Day 19 - summarization orchestration service."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from app.db.models.summary_record import SummaryRecordModel
 from app.db.models.task_record import TaskRecordModel
 from app.db.models.validation_issue_record import ValidationIssueRecordModel
 from app.services.structure_version_service import preferred_structure_version
+from app.services.grid_builder import with_header_parsing
 
 from .slice_builder import build_semantic_schema, build_slices
 from .summary_builder import build_statistical_summary
@@ -68,6 +69,9 @@ def summarize_task(
     for sheet_data in sheets_data:
         sheet_id = int(sheet_data.get("sheet_id", 0))
         sheet_name = str(sheet_data.get("sheet_name", ""))
+        # 从 aligned_grid 现场推导，不依赖快照中是否有 column_kinds/column_paths
+        if "aligned_cell_roles" in sheet_data:
+            sheet_data = with_header_parsing(sheet_data)
         aligned_grid = sheet_data.get("aligned_grid", [])
         column_paths = sheet_data.get("column_paths", [])
         column_kinds = sheet_data.get("column_kinds", [])
