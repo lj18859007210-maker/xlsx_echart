@@ -1,10 +1,9 @@
-"""Day 21 ChartSpec builder — transforms rules + data into ECharts-compatible specs."""
+"""Day 21 ChartSpec builder."""
 
 from __future__ import annotations
 
 
 def _col_letter(idx: int) -> str:
-    """Convert 0-based column index to Excel column letter."""
     result = ""
     n = idx
     while n >= 0:
@@ -13,15 +12,11 @@ def _col_letter(idx: int) -> str:
     return result
 
 
-def _cell_range(
-    start_row: int, start_col: int, end_row: int, end_col: int,
-) -> str:
-    """Return Excel-style cell range, e.g. B2:D5 (rows 0-based, cols 0-based)."""
+def _cell_range(start_row: int, start_col: int, end_row: int, end_col: int) -> str:
     return f"{_col_letter(start_col)}{start_row + 1}:{_col_letter(end_col)}{end_row + 1}"
 
 
 def _safe_float(val: object) -> float | None:
-    """Convert to float or return None."""
     if val is None:
         return None
     if isinstance(val, (int, float)):
@@ -34,25 +29,14 @@ def _safe_float(val: object) -> float | None:
     return None
 
 
-def build_chart_spec(
-    chart_rule: dict[str, object],
-    aligned_grid: list[list[object]],
-    column_kinds: list[str],
-    column_paths: list[list[str]],
-    column_names: list[str],
-    sheet_name: str,
-) -> dict[str, object]:
-    """Build a full ChartSpec from a chart rule and data grid."""
-
+def build_chart_spec(chart_rule, aligned_grid, column_kinds, column_paths, column_names, sheet_name):
     chart_type = str(chart_rule.get("chart_type", "bar"))
     title = str(chart_rule.get("title", ""))
     if not title:
         title = f"{sheet_name} - {_chart_type_label(chart_type)}"
 
-    # Find dimension and measure columns
-    dim_col: int | None = None
-    measure_cols: list[int] = []
-
+    dim_col = None
+    measure_cols = []
     for idx, kind in enumerate(column_kinds):
         if kind == "dimension" and dim_col is None:
             dim_col = idx
@@ -60,60 +44,49 @@ def build_chart_spec(
             measure_cols.append(idx)
 
     if dim_col is None:
-        dim_col = 0  # fallback
+        dim_col = 0
 
     if not measure_cols:
         measure_cols = [idx for idx in range(len(column_kinds)) if idx != dim_col]
         if not measure_cols:
             measure_cols = [dim_col]
 
-    # Build series from data rows
     data_rows = aligned_grid[1:]
-    x_data: list[object] = []
-    series_list: list[dict[str, object]] = []
-    y_field_names: list[str] = []
+    x_data = []
+    series_list = []
+    y_field_names = []
 
     for mc in measure_cols:
         y_name = column_names[mc] if mc < len(column_names) else f"col_{mc}"
         y_field_names.append(y_name)
-        data: list[float | None] = []
+        data = []
         for row in data_rows:
             if mc < len(row):
                 data.append(_safe_float(row[mc]))
             else:
                 data.append(None)
-        series_list.append({
-            "name": y_name,
-            "data": data,
-        })
+        series_list.append({"name": y_name, "data": data})
 
-    # X-axis data
     for row in data_rows:
         if dim_col < len(row):
             x_data.append(row[dim_col])
         else:
             x_data.append("")
 
-    # Source cells range
     header_row = 0
-    data_start_row = 1
     data_end_row = len(aligned_grid) - 1
     min_col = min([dim_col] + measure_cols)
     max_col = max([dim_col] + measure_cols)
     source_cells = [_cell_range(header_row, min_col, data_end_row, max_col)]
 
-    # Build filter conditions description
-    filter_conditions = _build_filter_conditions(
-        dim_col, measure_cols, column_names, data_rows,
-    )
-
-    # Highlight detection
+    filter_conditions = _build_filter_conditions(dim_col, measure_cols, column_names, data_rows)
     highlights = _detect_highlights(series_list)
 
     return {
         "chart_type": chart_type,
         "title": title,
         "x_field": column_names[dim_col] if dim_col < len(column_names) else "",
+        "x_data": x_data,
         "y_fields": y_field_names,
         "series": series_list,
         "highlights": highlights,
@@ -123,41 +96,22 @@ def build_chart_spec(
     }
 
 
-def _build_filter_conditions(
-    dim_col: int,
-    measure_cols: list[int],
-    column_names: list[str],
-    data_rows: list[list[object]],
-) -> str:
-    """Build a human-readable filter conditions string."""
-    dim_name = column_names[dim_col] if dim_col < len(column_names) else "维度"
-    measure_names = [
-        column_names[mc] if mc < len(column_names) else ""
-        for mc in measure_cols
-    ]
+def _build_filter_conditions(dim_col, measure_cols, column_names, data_rows):
+    dim_name = column_names[dim_col] if dim_col < len(column_names) else "dim"
+    measure_names = [column_names[mc] if mc < len(column_names) else "" for mc in measure_cols]
     measure_names = [n for n in measure_names if n]
     total_rows = len(data_rows)
-
-    parts = [
-        f"维度: {dim_name}",
-        f"指标: {', '.join(measure_names) if measure_names else 'N/A'}",
-        f"数据行数: {total_rows}",
-    ]
-    return "; ".join(parts)
+    parts = [f"dim: {dim_name}", f"metrics: {', '.join(measure_names) if measure_names else 'N/A'}", f"rows: {total_rows}"]
+    return " | ".join(parts)
 
 
-def _detect_highlights(
-    series_list: list[dict[str, object]],
-) -> list[dict[str, object]]:
-    """Detect outlier data points for chart highlighting (z-score > 2)."""
-    highlights: list[dict[str, object]] = []
+def _detect_highlights(series_list):
+    highlights = []
     for si, s in enumerate(series_list):
         data = s.get("data", [])
         if not isinstance(data, list) or len(data) < 3:
             continue
-        numeric: list[tuple[int, float]] = [
-            (i, v) for i, v in enumerate(data) if isinstance(v, (int, float))
-        ]
+        numeric = [(i, v) for i, v in enumerate(data) if isinstance(v, (int, float))]
         if len(numeric) < 3:
             continue
         values = [v for _, v in numeric]
@@ -174,23 +128,19 @@ def _detect_highlights(
                     "series_name": str(s.get("name", "")),
                     "data_index": idx,
                     "value": val,
-                    "reason": (
-                        f"z-score {z:.1f}, "
-                        f"value {val} deviates from mean {mean_val:.1f}"
-                    ),
+                    "reason": f"z={z:.1f}, val={val} vs mean={mean_val:.1f}",
                 })
     return highlights
 
 
 def _chart_type_label(chart_type: str) -> str:
-    """Human-readable chart type label."""
     labels = {
-        "bar": "柱状图",
-        "line": "折线图",
-        "pie": "饼图",
-        "scatter": "散点图",
-        "grouped_bar": "分组柱状图",
-        "stacked_bar": "堆叠柱状图",
-        "horizontal_bar": "条形图（排名）",
+        "bar": "Bar",
+        "line": "Line",
+        "pie": "Pie",
+        "scatter": "Scatter",
+        "grouped_bar": "Grouped Bar",
+        "stacked_bar": "Stacked Bar",
+        "horizontal_bar": "Horizontal Bar",
     }
     return labels.get(chart_type, chart_type)
