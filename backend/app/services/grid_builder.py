@@ -335,3 +335,60 @@ def build_sheet_payload(sheet: SheetRecordModel) -> dict[str, object]:
             "cell_tags": empty_cell_tags(sheet.row_count, sheet.col_count),
         }
     )
+
+
+def build_sheet_payload_paged(
+    sheet: SheetRecordModel,
+    offset: int = 0,
+    limit: int = 200,
+) -> dict[str, object]:
+    """Build a paginated review payload for a single sheet.
+
+    Returns only the requested row slice of aligned_grid, aligned_roles,
+    aligned_source_map, and cell_tags, plus column-level metadata.
+    """
+    grid_snapshot, address_map = build_grid_snapshot(sheet)
+    aligned_grid, aligned_roles, aligned_source_map = build_aligned_snapshot(sheet)
+    merge_ranges = sorted({cell.merge_range for cell in sheet.cells if cell.merge_range is not None})
+    tags = empty_cell_tags(sheet.row_count, sheet.col_count)
+
+    # Build metadata via the existing header parsing
+    meta = with_header_parsing({
+        "sheet_id": sheet.id,
+        "sheet_name": sheet.sheet_name,
+        "sheet_index": sheet.sheet_index,
+        "row_count": sheet.row_count,
+        "col_count": sheet.col_count,
+        "is_hidden": sheet.is_hidden,
+        "merge_ranges": merge_ranges,
+        "aligned_grid": aligned_grid,
+        "aligned_cell_roles": aligned_roles,
+        "aligned_source_map": aligned_source_map,
+        "cell_tags": tags,
+    })
+
+    start = max(0, offset)
+    end = min(sheet.row_count, start + limit)
+
+    return {
+        "sheet_id": sheet.id,
+        "sheet_name": sheet.sheet_name,
+        "sheet_index": sheet.sheet_index,
+        "row_count": sheet.row_count,
+        "col_count": sheet.col_count,
+        "is_hidden": sheet.is_hidden,
+        "header_row_span": meta["header_row_span"],
+        "column_kinds": meta["column_kinds"],
+        "column_paths": meta["column_paths"],
+        "dimension_columns": meta["dimension_columns"],
+        "measure_columns": meta["measure_columns"],
+        "merge_ranges": merge_ranges,
+        "offset": start,
+        "limit": limit,
+        "rows": aligned_grid[start:end],
+        "roles": aligned_roles[start:end],
+        "source_map": aligned_source_map[start:end],
+        "tags": tags[start:end],
+        "raw_rows": grid_snapshot[start:end],
+        "raw_source_map": address_map[start:end],
+    }

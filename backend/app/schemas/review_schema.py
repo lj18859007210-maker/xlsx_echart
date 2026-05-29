@@ -80,3 +80,35 @@ class ConfirmStructureVersionResponse(BaseModel):
     status: str
     structure_version: int
     confirmed_structure_version: int
+
+
+class PagedSheetPayload(BaseModel):
+    """Paginated sheet slice - only returns requested rows."""
+    sheet_id: int
+    sheet_name: str
+    sheet_index: int
+    row_count: int
+    col_count: int
+    is_hidden: bool
+    header_row_span: int
+    column_kinds: list[str]
+    column_paths: list[list[str]]
+    dimension_columns: list[int]
+    measure_columns: list[int]
+    merge_ranges: list[str]
+    offset: int
+    limit: int
+    rows: list[list[str | None]]          # aligned_grid slice
+    roles: list[list[str]]                 # aligned_cell_roles slice
+    source_map: list[list[str | None]]    # aligned_source_map slice
+    tags: list[list[str]]                  # cell_tags slice
+    raw_rows: list[list[str | None]]      # grid_snapshot slice
+    raw_source_map: list[list[str]]       # address_map slice
+
+
+class TaskReviewPagedResponse(BaseModel):
+    task_id: int
+    status: str
+    structure_version: int
+    editable_structure_version: int
+    sheet: PagedSheetPayload

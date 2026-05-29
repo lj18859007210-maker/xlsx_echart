@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends
+﻿from fastapi import APIRouter, Body, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,8 @@ from app.schemas.review_schema import (
     ConfirmStructureVersionResponse,
     SaveStructureVersionRequest,
     StructureVersionSaveResponse,
+    PagedSheetPayload,
+    TaskReviewPagedResponse,
     TaskReviewResponse,
 )
 from app.schemas.summary_schema import SummaryResponse
@@ -30,6 +32,7 @@ from app.services.excel_parse_service import parse_task_workbook
 from app.services.formula import formula_inference_service, formula_rule_reader
 from app.services.review_service import (
     build_task_review,
+    build_task_review_paged,
     confirm_structure_version,
     save_structure_version,
 )
@@ -58,6 +61,18 @@ def parse_task(task_id: int, db: Session = Depends(get_db)) -> TaskParseResponse
 def get_task_review(task_id: int, db: Session = Depends(get_db)) -> TaskReviewResponse:
     payload = build_task_review(task_id, db)
     return TaskReviewResponse(**payload)
+
+
+@router.get("/{task_id}/review/rows", response_model=TaskReviewPagedResponse)
+def get_task_review_paged(
+    task_id: int,
+    sheet_id: int,
+    offset: int = 0,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+) -> TaskReviewPagedResponse:
+    payload = build_task_review_paged(task_id, sheet_id, offset, limit, db)
+    return TaskReviewPagedResponse(**payload)
 
 
 @router.post(
@@ -231,3 +246,4 @@ def get_task_chart_specs(
     if payload is None:
         return ChartSpecListResponse(task_id=task_id, total=0, charts=[])
     return ChartSpecListResponse(**payload)
+

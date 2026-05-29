@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -17,6 +17,7 @@ class StructureVersionRecordModel(Base):
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     snapshot_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
     patch_summary_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    base_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -25,3 +26,5 @@ class StructureVersionRecordModel(Base):
     )
 
     task: Mapped["TaskRecordModel"] = relationship(back_populates="structure_versions")
+
+

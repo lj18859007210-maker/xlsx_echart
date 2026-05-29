@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.anomaly_issue_record import AnomalyIssueRecordModel
 from app.db.models.task_record import TaskRecordModel
-from app.services.structure_version_service import preferred_structure_version
+from app.services.structure_version_service import expand_snapshot_to_sheets, preferred_structure_version
 from app.services.grid_builder import with_header_parsing
 
 from .decline_detector import detect_consecutive_declines
@@ -49,7 +49,7 @@ def detect_task_anomalies(
             detail="No structure version available",
         )
 
-    sheets_data = structure.snapshot_json.get("sheets", [])
+    sheets_data = expand_snapshot_to_sheets(db, structure.snapshot_json, task_id)
     if not isinstance(sheets_data, list) or not sheets_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -11,7 +11,7 @@ from app.db.models.sheet_record import SheetRecordModel
 from app.db.models.task_record import TaskRecordModel
 from app.db.models.validation_issue_record import ValidationIssueRecordModel
 from app.services.formula.formula_quality_filter import filter_formula_rules
-from app.services.structure_version_service import preferred_structure_version
+from app.services.structure_version_service import expand_snapshot_to_sheets, preferred_structure_version
 
 from .aggregate_validator import validate_aggregates
 from .execution_plan import build_execution_plans
@@ -52,7 +52,7 @@ def validate_task_formulas(
             detail="No structure version available",
         )
 
-    sheets_data = structure.snapshot_json.get("sheets", [])
+    sheets_data = expand_snapshot_to_sheets(db, structure.snapshot_json, task_id)
     if not isinstance(sheets_data, list) or not sheets_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: light;
   font-family: "Trebuchet MS", "PingFang SC", sans-serif;
   --bg-0: #f3eee5;
@@ -416,7 +416,7 @@ input {
 }
 
 /* ================================================================
-   Day 22 — Results Page
+   Day 22 鈥?Results Page
    ================================================================ */
 
 
@@ -953,7 +953,7 @@ input {
   color: var(--ink-1);
   font-family: monospace;
 }
-/* ── Upload Page ── */
+/* 鈹€鈹€ Upload Page 鈹€鈹€ */
 
 .upload-page {
   display: flex;
@@ -994,7 +994,7 @@ input {
   line-height: 1.65;
 }
 
-/* ── Dropzone ── */
+/* 鈹€鈹€ Dropzone 鈹€鈹€ */
 
 .upload-stage {
   width: 100%;
@@ -1051,7 +1051,7 @@ input {
   display: none;
 }
 
-/* ── Progress ── */
+/* 鈹€鈹€ Progress 鈹€鈹€ */
 
 .upload-progress {
   display: flex;
@@ -1084,7 +1084,7 @@ input {
   text-align: center;
 }
 
-/* ── Outcome ── */
+/* 鈹€鈹€ Outcome 鈹€鈹€ */
 
 .upload-outcome {
   display: flex;
@@ -1158,7 +1158,7 @@ input {
   margin-top: 0.25rem;
 }
 
-/* ── Buttons ── */
+/* 鈹€鈹€ Buttons 鈹€鈹€ */
 
 .upload-btn {
   padding: 0.5rem 1.2rem;
@@ -1204,7 +1204,7 @@ input {
   50% { opacity: 1; }
 }
 
-/* ── Pipeline Panel ── */
+/* 鈹€鈹€ Pipeline Panel 鈹€鈹€ */
 
 .pipeline-panel {
   margin: 2rem 0 0;
@@ -1514,3 +1514,5 @@ input {
   color: var(--ink-1);
   font-size: 0.95rem;
 }
+
+

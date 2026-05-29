@@ -128,3 +128,35 @@ export type ConfirmStructureVersionResponse = {
   structure_version: number;
   confirmed_structure_version: number;
 };
+
+/** Paginated sheet row payload from GET /tasks/{id}/review/rows */
+export type PagedSheetPayload = {
+  sheet_id: number;
+  sheet_name: string;
+  sheet_index: number;
+  row_count: number;
+  col_count: number;
+  is_hidden: boolean;
+  header_row_span: number;
+  column_kinds: string[];
+  column_paths: string[][];
+  dimension_columns: number[];
+  measure_columns: number[];
+  merge_ranges: string[];
+  offset: number;
+  limit: number;
+  rows: Array<Array<string | null>>;
+  roles: Array<Array<string>>;
+  source_map: Array<Array<string | null>>;
+  tags: Array<Array<string>>;
+  raw_rows: Array<Array<string | null>>;
+  raw_source_map: Array<Array<string>>;
+};
+
+export type TaskReviewPagedResponse = {
+  task_id: number;
+  status: string;
+  structure_version: number;
+  editable_structure_version: number;
+  sheet: PagedSheetPayload;
+};

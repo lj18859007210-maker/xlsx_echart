@@ -19,6 +19,7 @@ export function TaskReviewPage({
   const [viewMode, setViewMode] = useState<"raw" | "aligned">("aligned");
 
   const review = useTaskReview(activeTaskId);
+  const { loadMoreRows, loadingMore } = review;
   const draft = useDraftEditing({
     selectedSheetId: review.selectedSheetId,
     selectedSheet: review.selectedSheet,
@@ -270,7 +271,13 @@ export function TaskReviewPage({
           {review.selectedSheet ? (
             <ReviewGrid
               draftSheet={draft.selectedDraftSheet}
+              loadingMore={loadingMore}
               mode={viewMode}
+              onLoadMore={() => {
+                if (review.selectedSheetId != null) {
+                  void loadMoreRows(review.selectedSheetId, 0);
+                }
+              }}
               onCellSelect={viewMode === "aligned" ? draft.handleCellSelect : undefined}
               selectedRange={viewMode === "aligned" ? draft.selectedRange : null}
               sheet={review.selectedSheet}
