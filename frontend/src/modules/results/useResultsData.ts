@@ -8,7 +8,7 @@ import type {
   IssueItem,
 } from "../../types/results";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
+import { api, ApiError } from "../api-client";
 
 export type ResultsData = {
   summary: SummaryRecord | null;
@@ -41,11 +41,11 @@ export function useResultsData(taskId: string): ResultsData {
         const [
           sumRes, insRes, chartRes, valRes, anoRes,
         ] = await Promise.all([
-          fetch(`${API_BASE}/tasks/${taskId}/summary`),
-          fetch(`${API_BASE}/tasks/${taskId}/insights`),
-          fetch(`${API_BASE}/tasks/${taskId}/chart-specs`),
-          fetch(`${API_BASE}/tasks/${taskId}/validation-issues`),
-          fetch(`${API_BASE}/tasks/${taskId}/anomaly-issues`),
+          api.get(`/tasks/${taskId}/summary`),
+          api.get(`/tasks/${taskId}/insights`),
+          api.get(`/tasks/${taskId}/chart-specs`),
+          api.get(`/tasks/${taskId}/validation-issues`),
+          api.get(`/tasks/${taskId}/anomaly-issues`),
         ]);
 
         if (!cancelled) {

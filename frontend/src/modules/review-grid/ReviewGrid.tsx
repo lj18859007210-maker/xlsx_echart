@@ -83,7 +83,7 @@ export function ReviewGrid({
     <div className="review-grid-shell">
       <div className="review-grid-header">
         <div>
-          <p className="mini-label">Grid View</p>
+          <p className="mini-label">网格视图</p>
           <h3>{mode === "raw" ? "Original Grid Snapshot" : "Aligned Logic Grid"}</h3>
         </div>
         <p className="review-grid-meta">

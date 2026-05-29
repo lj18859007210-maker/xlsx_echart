@@ -1,13 +1,21 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 
 import { ReviewGrid } from "../modules/review-grid/ReviewGrid";
 import { useTaskReview } from "../modules/review-grid/useTaskReview";
 import { useDraftEditing } from "../modules/review-grid/useDraftEditing";
 import { useStructureVersion } from "../modules/review-grid/useStructureVersion";
+import { usePipeline } from "../modules/pipeline/usePipeline";
+import { PipelinePanel } from "../modules/pipeline/PipelinePanel";
 
-export function TaskReviewPage() {
-  const [taskIdInput, setTaskIdInput] = useState("1");
-  const [activeTaskId, setActiveTaskId] = useState("1");
+export function TaskReviewPage({
+  taskId = "1",
+  onViewResults,
+}: {
+  taskId?: string;
+  onViewResults?: () => void;
+}) {
+  const [taskIdInput, setTaskIdInput] = useState(taskId);
+  const [activeTaskId, setActiveTaskId] = useState(taskId);
   const [viewMode, setViewMode] = useState<"raw" | "aligned">("aligned");
 
   const review = useTaskReview(activeTaskId);
@@ -17,20 +25,45 @@ export function TaskReviewPage() {
     draftSheets: review.draftSheets,
     setDraftSheets: review.setDraftSheets,
   });
+
+  const pipeline = usePipeline();
+
   const versioning = useStructureVersion({
     payload: review.payload,
     setPayload: review.setPayload,
     draftSheets: review.draftSheets,
     setError: review.setError,
+    onConfirmed: () => {
+      pipeline.run(activeTaskId);
+    },
   });
+
+  const statusLabel = (s: string) => {
+    const map: Record<string, string> = {
+      uploaded: "已上传",
+      parsing: "解析中",
+      parsed: "已解析",
+      confirmed: "已确认",
+      running: "执行中",
+      completed: "已完成",
+      failed: "失败",
+    };
+    return map[s] ?? s;
+  };
+
+  const statusIcon = (s: string) => {
+    if (s === "confirmed" || s === "completed") return "✅";
+    if (s === "running" || s === "parsing") return "⏳";
+    if (s === "failed") return "❌";
+    return "⏳";
+  };
 
   const taskSummary = review.payload
     ? [
-        { label: "Task", value: `#${review.payload.task_id}` },
-        { label: "Status", value: review.payload.status },
-        { label: "Sheets", value: String(review.payload.sheets.length) },
-        { label: "Structure", value: `v${review.payload.structure_version}` },
-        { label: "Selection", value: draft.selectedRange ? "active" : "none" },
+        { icon: "📋", label: "任务", value: `#${review.payload.task_id}` },
+        { icon: statusIcon(review.payload.status), label: "状态", value: statusLabel(review.payload.status), isStatus: true, status: review.payload.status },
+        { icon: "📊", label: "工作表", value: String(review.payload.sheets.length) },
+        { icon: "🔖", label: "结构版本", value: `v${review.payload.structure_version}` },
       ]
     : [];
 
@@ -38,11 +71,10 @@ export function TaskReviewPage() {
     <main className="review-page">
       <section className="review-hero">
         <div className="review-hero-copy">
-          <p className="eyebrow">Day 8 Gate 1 Frame</p>
-          <h1>Structure Review Studio</h1>
+          <p className="eyebrow">Gate 1 · 结构确认</p>
+          <h1>结构编辑</h1>
           <p className="summary">
-            Task detail, review payload, and the first Gate 1 layout are now connected to the
-            live backend review endpoint.
+            确认表格结构（合并/拆分/表头标记）后，系统将自动执行公式校验、异常检测、AI 分析与图表生成。
           </p>
         </div>
 
@@ -60,31 +92,34 @@ export function TaskReviewPage() {
               onChange={(event) => setTaskIdInput(event.target.value)}
             />
           </label>
-          <button type="submit">Load</button>
+          <button type="submit">加载</button>
         </form>
 
         {taskSummary.length > 0 && (
-          <dl className="task-summary-grid">
-            {taskSummary.map((item) => (
-              <div className="summary-item" key={item.label}>
-                <dt>{item.label}</dt>
-                <dd>{item.value}</dd>
+          <div className="task-overview-strip">
+            {taskSummary.map((item: any) => (
+              <div className={`overview-card${item.isStatus ? " status-" + item.status : ""}`} key={item.label}>
+                <span className="overview-card-icon">{item.icon}</span>
+                <div>
+                  <p>{item.label}</p>
+                  <strong>{item.value}</strong>
+                </div>
               </div>
             ))}
-          </dl>
+          </div>
         )}
 
         {review.error && <p className="error-banner">{review.error}</p>}
       </section>
 
-      {review.loading && <p className="loading-banner">Loading review data...</p>}
+      {review.loading && <p className="loading-banner">加载中...</p>}
 
       <section className="review-workspace">
         <aside className="review-sidebar">
           <div className="sidebar-panel">
             <div className="sidebar-heading">
-              <p className="mini-label">Workbook</p>
-              <h2>Sheets</h2>
+              <p className="mini-label">工作簿</p>
+              <h2>工作表</h2>
             </div>
             {review.payload && (
               <div className="sheet-stack">
@@ -101,8 +136,8 @@ export function TaskReviewPage() {
                   >
                     <span>{sheet.sheet_name}</span>
                     <small>
-                      {sheet.row_count}脳{sheet.col_count}
-                      {sheet.is_hidden ? " 路 hidden" : ""}
+                      {sheet.row_count}×{sheet.col_count}
+                      {sheet.is_hidden ? " · 隐藏" : ""}
                     </small>
                   </button>
                 ))}
@@ -112,8 +147,8 @@ export function TaskReviewPage() {
 
           <div className="sidebar-panel">
             <div className="sidebar-heading">
-              <p className="mini-label">Merge Map</p>
-              <h2>Ranges</h2>
+              <p className="mini-label">合并区域</p>
+              <h2>范围</h2>
             </div>
             <div className="merge-list">
               {draft.visibleMergeRanges.map((range) => (
@@ -122,21 +157,21 @@ export function TaskReviewPage() {
                 </span>
               ))}
               {review.selectedSheet && draft.visibleMergeRanges.length === 0 && (
-                <p className="sidebar-message">No merged ranges in this sheet.</p>
+                <p className="sidebar-message">当前工作表无合并单元格。</p>
               )}
             </div>
           </div>
 
           <div className="sidebar-panel">
             <div className="sidebar-heading">
-              <p className="mini-label">Header Parse</p>
-              <h2>Column Shape</h2>
+              <p className="mini-label">表头解析</p>
+              <h2>列结构</h2>
             </div>
             {draft.headerSummary && (
               <div className="merge-list">
-                <span className="merge-pill">{draft.headerSummary.headerRowSpan} header rows</span>
-                <span className="merge-pill">{draft.headerSummary.dimensionCount} dimension cols</span>
-                <span className="merge-pill">{draft.headerSummary.measureCount} measure cols</span>
+                <span className="merge-pill">{draft.headerSummary.headerRowSpan} 行表头</span>
+                <span className="merge-pill">{draft.headerSummary.dimensionCount} 个维度列</span>
+                <span className="merge-pill">{draft.headerSummary.measureCount} 个指标列</span>
                 {draft.headerSummary.previewPaths.map((path) => (
                   <span className="merge-pill" key={path}>
                     {path}
@@ -148,32 +183,41 @@ export function TaskReviewPage() {
 
           <div className="sidebar-panel">
             <div className="sidebar-heading">
-              <p className="mini-label">Edit Controls</p>
-              <h2>Draft Actions</h2>
+              <p className="mini-label">编辑工具</p>
+              <h2>操作</h2>
             </div>
             <div className="action-stack">
+              <p className="action-group-label">区域操作</p>
               <button className="action-button" type="button" onClick={draft.mergeSelection}>
-                Merge selection
+                合并选中区域
               </button>
+              <span className="action-hint">将选中的多个单元格合并为一个区域</span>
               <button className="action-button" type="button" onClick={draft.splitSelection}>
-                Split selection
+                拆分选中区域
               </button>
+              <span className="action-hint">将合并的区域拆分为独立单元格</span>
+
+              <p className="action-group-label">标记操作</p>
               <button
                 className="action-button is-soft"
                 type="button"
                 onClick={() => draft.markSelection("header")}
               >
-                Mark header
+                标记为表头
               </button>
+              <span className="action-hint">将选中行标记为表头行</span>
               <button
                 className="action-button is-soft"
                 type="button"
                 onClick={() => draft.markSelection("data")}
               >
-                Mark data
+                标记为数据
               </button>
+              <span className="action-hint">将选中行标记为数据行</span>
+
+              <p className="action-group-label">提交操作</p>
               <button className="action-button is-ghost" type="button" onClick={draft.resetSelection}>
-                Clear selection
+                清除选择
               </button>
               <button
                 className="action-button"
@@ -181,29 +225,28 @@ export function TaskReviewPage() {
                 onClick={versioning.saveDraft}
                 disabled={versioning.saving}
               >
-                {versioning.saving ? "Saving..." : "Save draft"}
+                {versioning.saving ? "保存中..." : "保存草稿"}
               </button>
               <button
-                className="action-button"
+                className="action-button is-primary"
                 type="button"
                 onClick={versioning.confirmStructure}
-                disabled={versioning.saving}
+                disabled={versioning.saving || pipeline.running}
               >
-                {versioning.saving ? "Working..." : "Confirm structure"}
+                {versioning.saving ? "处理中..." : "确认结构"}
               </button>
             </div>
-            <p className="sidebar-message">
-              {versioning.actionMessage ??
-                "Day 10 now saves immutable structure versions before confirmation."}
-            </p>
+            <div className="action-confirm-hint">
+              <p>{versioning.actionMessage ?? "确认结构后将自动执行后续分析管线。"}</p>
+            </div>
           </div>
         </aside>
 
         <section className="review-stage">
           <div className="stage-toolbar">
             <div>
-              <p className="mini-label">Structure Review</p>
-              <h2>{review.selectedSheet?.sheet_name ?? "No sheet selected"}</h2>
+              <p className="mini-label">结构预览</p>
+              <h2>{review.selectedSheet?.sheet_name ?? "未选择工作表"}</h2>
             </div>
 
             <div className="view-toggle">
@@ -212,14 +255,14 @@ export function TaskReviewPage() {
                 className={viewMode === "raw" ? "is-selected" : ""}
                 onClick={() => setViewMode("raw")}
               >
-                Original
+                原始
               </button>
               <button
                 type="button"
                 className={viewMode === "aligned" ? "is-selected" : ""}
                 onClick={() => setViewMode("aligned")}
               >
-                Aligned
+                对齐后
               </button>
             </div>
           </div>
@@ -234,11 +277,19 @@ export function TaskReviewPage() {
             />
           ) : (
             <div className="empty-state">
-              <p>No review data loaded yet.</p>
+              <p>尚未加载数据。</p>
             </div>
           )}
         </section>
       </section>
+
+      <PipelinePanel
+        steps={pipeline.steps}
+        running={pipeline.running}
+        allDone={pipeline.allDone}
+        hasFailure={pipeline.hasFailure}
+        onViewResults={onViewResults}
+      />
     </main>
   );
 }

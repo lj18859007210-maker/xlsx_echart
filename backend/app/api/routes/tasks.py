@@ -36,6 +36,10 @@ from app.services.review_service import (
 from app.services.summarize import summarize_service
 from app.services.validation import validation_service
 
+from app.core.logging import get_logger, set_task_id
+
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 
@@ -185,8 +189,7 @@ def get_task_summary(
 ) -> SummaryResponse:
     payload = summarize_service.get_summary(task_id, db)
     if payload is None:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="No summary found for this task")
+        return SummaryResponse(task_id=task_id, statistical_summary=[], validation_issues_summary={}, anomaly_summary={}, slices=[], semantic_schema=[], token_estimate=0)
     return SummaryResponse(**payload)
 
 
@@ -206,8 +209,7 @@ def get_task_insights(
 ) -> AnalysisResponse:
     payload = analysis_service.get_insight(task_id, db)
     if payload is None:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="No insights found for this task")
+        return AnalysisResponse(task_id=task_id, executive_summary="", key_findings=[], risks=[], recommendations=[], chart_hints=[], citations=[], model_name="")
     return AnalysisResponse(**payload)
 
 
@@ -227,6 +229,5 @@ def get_task_chart_specs(
 ) -> ChartSpecListResponse:
     payload = chart_service.get_chart_specs(task_id, db)
     if payload is None:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="No chart specs found for this task")
+        return ChartSpecListResponse(task_id=task_id, total=0, charts=[])
     return ChartSpecListResponse(**payload)

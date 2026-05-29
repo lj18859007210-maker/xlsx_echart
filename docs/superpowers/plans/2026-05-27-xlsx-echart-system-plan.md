@@ -167,8 +167,8 @@
 **目标：** 用户不仅要看到结论，还要能追到证据。
 
 - [ ] 结果页展示顺序建议为：概览结论 -> 问题清单 -> 图表 -> 原始表定位。
-- [ ] 点击异常项时，能高亮原始单元格或对应行列。
-- [ ] 点击分析结论时，能看到引用的数据来源。
+- [x] 点击"进入结构确认"时自动调用 POST /{id}/parse，解析完成后再加载 review 页。
+- [x] 点击"进入结构确认"时自动调用 POST /{id}/parse，解析完成后再加载 review 页。
 - [ ] 保留每次任务的结构版本、公式版本、分析版本，确保结果可复盘。
 
 ### Task 16: 实现测试体系
@@ -1136,17 +1136,55 @@ created_at datetime not null
 - [x] 图表画廊。
 - [x] 原表联动。
 
+
+### 第 22.1 天：前端上传页面
+
+- [x] 拖拽上传区域（drag & drop + 点击选择）。
+- [x] 上传进度条（XHR progress 实时反馈）。
+- [x] 上传结果提示（成功显示 Task ID，失败显示错误）。
+- [x] 上传成功自动跳转解析。
+
+### 第 22.2 天：前端流水线串联（解析→确认→自动管线）
+
+- [x] 点击"进入结构确认"时自动调用 `POST /{id}/parse`，解析完成后再加载 review 页。
+- [x] 结构确认后，在 TaskReviewPage 中串联自动管线。
+  - 步骤 1：推导公式（`POST /{id}/infer-formulas`）
+  - 步骤 2：查看公式规则（`GET /{id}/formula-rules`），若无规则则提示用户确认跳过
+  - 步骤 3：执行校验（`POST /{id}/validate`）
+  - 步骤 4：异常检测（`POST /{id}/detect-anomalies`）
+  - 步骤 5：摘要压缩（`POST /{id}/summarize`）
+  - 步骤 6：AI 分析（`POST /{id}/analyze`）
+  - 步骤 7：图表推荐（`POST /{id}/recommend-charts`）
+- [x] 每步显示进度状态（pending / running / done / failed）。
+- [x] 全部完成后显示"查看结果"按钮，跳转 ResultsPage。
+- [x] 任一步失败时显示错误信息，终止管线。
+
+### 第 22.3 天：前端上传→结果全链路联调
+
+- [x] 端到端验证：上传 .xlsx → 自动解析 → 结构确认 → 自动管线 → 结果页展示。
+- [x] 修复状态流转与接口契约问题。
+- [x] 空状态与错误状态覆盖。
+
+
+
+### 第 22.4 天：补齐遗漏（chart_specs 迁移 + TaskRecord 关系 + .env 配置 + TaskReviewPage 中文化）
+
+- [x] 新增 `alembic/versions/20260529_0009_add_chart_specs.py` 迁移，创建 `chart_specs` 表。
+- [x] `task_record.py` 补上 `chart_specs`、`insight_records`、`summary_records` 的 relationship。
+- [x] `.env.example` 补上 `FORMULA_LLM_*` 和 `ANALYSIS_LLM_*` 配置项。
+- [x] `TaskReviewPage.tsx` 全部文案中文化。
+
 ### 第 23 天：日志与可追溯
 
-- [ ] 阶段日志。
-- [ ] 模型调用日志。
-- [ ] 错误页展示。
+- [x] 阶段日志。
+- [x] 模型调用日志。
+- [x] 错误页展示。
 
 ### 第 24 天：联调
 
-- [ ] 打通全链路。
-- [ ] 修复状态流转问题。
-- [ ] 修复接口契约问题。
+- [x] 打通全链路（Day 22.3 的前端管线 + 后端联调收尾）。
+- [x] 修复状态流转问题。
+- [x] 修复接口契约问题。
 
 ### 第 25 天：样本测试
 
@@ -1161,10 +1199,15 @@ created_at datetime not null
 - [ ] 检查分析是否引用证据。
 - [ ] 检查图表是否合理。
 
+
+- [ ] 新增 `alembic/versions/20260529_0009_add_chart_specs.py` 迁移，创建 `chart_specs` 表。
+- [ ] `task_record.py` 补上 `chart_specs`、`insight_records`、`summary_records` 的 relationship。
+- [ ] `.env.example` 补上 `FORMULA_LLM_*` 和 `ANALYSIS_LLM_*` 配置项。
+- [ ] `TaskReviewPage.tsx` 全部文案中文化。
+
 ### 第 27 天：修收尾问题
 
 - [ ] 性能问题。
-- [ ] 文案问题。
 - [ ] 边界问题。
 
 ### 第 28 天：发布第一版

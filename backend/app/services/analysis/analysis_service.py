@@ -102,6 +102,10 @@ def analyze_task(
         db=db,
     )
 
+    # Update task status so chart step can proceed
+    task.status = "analyzed"
+    db.commit()
+
     return {
         "task_id": task_id,
         "executive_summary": analysis.executive_summary,

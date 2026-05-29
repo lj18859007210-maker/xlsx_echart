@@ -1,0 +1,9 @@
+{
+  "choices": [
+    {
+      "message": {
+        "content": "{\"sheet_candidates\": [{\"sheet_id\": 1, \"candidates\": [{\"formula_text\": \"=SUM(B2:B10)\", \"confidence\": 0.9, \"rationale\": \"\\u6c42\\u548c\\u533a\\u57df\\uff08Mock\\uff09\"}]}]}"
+      }
+    }
+  ]
+}

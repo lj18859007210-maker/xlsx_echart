@@ -1,0 +1,13 @@
+{
+  "charts": [
+    {
+      "chart_type": "bar",
+      "title": "销售数据概览（Mock）",
+      "x_field": "月份",
+      "y_fields": [
+        "销售额"
+      ],
+      "reason": "模拟图表推荐"
+    }
+  ]
+}

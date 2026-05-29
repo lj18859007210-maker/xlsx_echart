@@ -1,17 +1,39 @@
-"""Day 20 - LLM client for analysis.
-
-Mockable HTTP client. Follows same pattern as Day 13 llm_formula_client.
-"""
+"""Day 20 - LLM client for analysis. Supports mock mode."""
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from urllib import request
 from urllib.error import URLError
 
 from app.core.config import settings
 
 ANALYSIS_TIMEOUT_SECONDS = 60
+
+_MOCK_DATA: dict[str, object] | None = None
+
+
+def _load_mock() -> dict[str, object]:
+    global _MOCK_DATA
+    if _MOCK_DATA is not None:
+        return _MOCK_DATA
+    fixture = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "mock_insights.json"
+    if fixture.exists():
+        _MOCK_DATA = json.loads(fixture.read_text(encoding="utf-8"))
+    else:
+        _MOCK_DATA = {
+            "insights": [
+                {
+                    "title": "数据质量良好",
+                    "description": "未发现异常数据（Mock 模式）",
+                    "severity": "low",
+                    "evidence": [],
+                    "needs_human_review": False,
+                }
+            ]
+        }
+    return _MOCK_DATA
 
 
 def call_analysis_llm(
@@ -20,10 +42,11 @@ def call_analysis_llm(
     user_prompt: str,
     model_name: str | None = None,
 ) -> dict[str, object]:
-    """Call the LLM API for analysis.
+    """Call the LLM API for analysis, or return mock data."""
 
-    Raises RuntimeError on network/API failures.
-    """
+    if settings.llm_mock_mode:
+        return _load_mock()
+
     model = model_name or settings.analysis_llm_model
     payload = json.dumps({
         "model": model,
@@ -52,16 +75,4 @@ def call_analysis_llm(
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"LLM API returned invalid JSON: {exc}") from exc
 
-    # Extract content from OpenAI-compatible response format
-    choices = body.get("choices", [])
-    if not choices:
-        raise RuntimeError("LLM API returned empty choices")
-
-    content = choices[0].get("message", {}).get("content", "")
-    if not content:
-        raise RuntimeError("LLM API returned empty content")
-
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"LLM response content is not valid JSON: {exc}") from exc
+    return body

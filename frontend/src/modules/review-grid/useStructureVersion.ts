@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 
 import {
   applyDraftSheetsToReview,
@@ -19,8 +19,9 @@ export function useStructureVersion(opts: {
   setPayload: React.Dispatch<React.SetStateAction<TaskReviewResponse | null>>;
   draftSheets: Record<number, DraftReviewSheet>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
+  onConfirmed?: () => void;
 }) {
-  const { payload, setPayload, draftSheets, setError } = opts;
+  const { payload, setPayload, draftSheets, setError, onConfirmed } = opts;
 
   const [saving, setSaving] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -120,6 +121,7 @@ export function useStructureVersion(opts: {
           : current,
       );
       setActionMessage(`Confirmed structure v${result.confirmed_structure_version}`);
+      onConfirmed?.();
     } catch (requestError) {
       setError(
         requestError instanceof Error ? requestError.message : "Failed to confirm structure",

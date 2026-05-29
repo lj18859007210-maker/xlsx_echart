@@ -1,0 +1,11 @@
+{
+  "insights": [
+    {
+      "title": "数据质量良好",
+      "description": "未发现异常数据（Mock 模式）",
+      "severity": "low",
+      "evidence": [],
+      "needs_human_review": false
+    }
+  ]
+}

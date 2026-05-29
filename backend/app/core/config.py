@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     database_url: str = DEFAULT_DATABASE_URL
     upload_dir: str = str(DEFAULT_UPLOAD_DIR)
     log_level: str = "INFO"
+    llm_mock_mode: bool = True
     formula_llm_api_url: str = "https://example.invalid/v1/formula-infer"
     formula_llm_api_key: str = ""
     formula_llm_model: str = "mock/day13"

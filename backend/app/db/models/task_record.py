@@ -8,10 +8,13 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.anomaly_issue_record import AnomalyIssueRecordModel
+    from app.db.models.chart_spec_record import ChartSpecRecordModel
     from app.db.models.file_record import FileRecordModel
     from app.db.models.formula_rule_record import FormulaRuleRecordModel
+    from app.db.models.insight_record import InsightRecordModel
     from app.db.models.sheet_record import SheetRecordModel
     from app.db.models.structure_version_record import StructureVersionRecordModel
+    from app.db.models.summary_record import SummaryRecordModel
     from app.db.models.validation_issue_record import ValidationIssueRecordModel
 
 
@@ -57,6 +60,18 @@ class TaskRecordModel(Base):
         cascade="all, delete-orphan",
     )
     anomaly_issues: Mapped[list["AnomalyIssueRecordModel"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+    chart_specs: Mapped[list["ChartSpecRecordModel"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+    insight_records: Mapped[list["InsightRecordModel"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+    summary_records: Mapped[list["SummaryRecordModel"]] = relationship(
         back_populates="task",
         cascade="all, delete-orphan",
     )

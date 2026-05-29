@@ -12,7 +12,7 @@ type Props = {
   onBack: () => void;
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
+import { api } from "../modules/api-client";
 
 export function ResultsPage({ taskId, onBack }: Props) {
   const data = useResultsData(taskId);
@@ -21,11 +21,9 @@ export function ResultsPage({ taskId, onBack }: Props) {
   const [reviewGrid, setReviewGrid] = useState<Array<Array<string | null>>>([]);
   const [reviewSheetName, setReviewSheetName] = useState("");
 
-  // Load first sheet's aligned_grid for source table
   useEffect(() => {
     let cancelled = false;
-    void fetch(`${API_BASE}/tasks/${taskId}/review`)
-      .then((r) => r.json())
+    void api.get(`/tasks/${taskId}/review`)
       .then((d: { sheets?: ReviewSheetSnapshot[] }) => {
         if (!cancelled) {
           const first = d.sheets?.[0];
@@ -66,7 +64,7 @@ export function ResultsPage({ taskId, onBack }: Props) {
       <main className="results-page">
         <div className="error-banner">{data.error}</div>
         <button onClick={onBack} type="button" className="back-button">
-          鈫?杩斿洖
+          ← 返回
         </button>
       </main>
     );
@@ -76,9 +74,9 @@ export function ResultsPage({ taskId, onBack }: Props) {
     <main className="results-page">
       <header className="results-header">
         <button onClick={onBack} type="button" className="back-button">
-          鈫?杩斿洖缁撴瀯缂栬緫
+          ← 返回
         </button>
-        <h1>鍒嗘瀽缁撴灉 鈥?Task #{taskId}</h1>
+        <h1>分析结果 — Task #{taskId}</h1>
       </header>
 
       <OverviewCards data={data} />

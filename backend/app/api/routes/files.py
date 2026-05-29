@@ -4,6 +4,9 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.file_schema import FileUploadResponse
 from app.services.file_upload_service import create_upload_records
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
